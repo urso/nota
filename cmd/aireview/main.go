@@ -170,8 +170,7 @@ func deleteFromFiles(fileContents map[string][]byte, fileRanges map[string][]del
 
 func runDelete(args []string) {
 	fs := flag.NewFlagSet("delete", flag.ExitOnError)
-	format, _, modified, unstaged, staged, all := addSharedFlags(fs)
-	_ = format
+	_, _, modified, unstaged, staged, all := addSharedFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

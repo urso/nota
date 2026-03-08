@@ -287,45 +287,29 @@ func (s *CommentScanner) processCode(st *stateCode) (state, error) {
 			continue
 		}
 
+		// Resolve ties: multiline comment has highest priority,
+		// then line-comment-or-string ambiguity, then line comment, then string.
 		switch {
-		case mmLen == maxLen && lcLen < maxLen && strsLen < maxLen:
+		case mmLen == maxLen:
 			s.commentStartByte = s.byteOffset
 			return &stateMultilineComment{
 				line:  s.line,
 				index: mmIndex,
 			}, nil
-		case lcLen == maxLen && mmLen < maxLen && strsLen < maxLen:
-			s.commentStartByte = s.byteOffset
-			return &stateLineComment{
-				index: lcIndex,
-			}, nil
-		case strsLen == maxLen && lcLen < maxLen && mmLen < maxLen:
-			return &stateString{
-				index: sIndex,
-			}, nil
-		case mmLen == maxLen && lcLen == maxLen && strsLen < maxLen:
-			s.commentStartByte = s.byteOffset
-			return &stateMultilineComment{
-				line:  s.line,
-				index: mmIndex,
-			}, nil
-		case mmLen == maxLen && strsLen == maxLen && lcLen < maxLen:
-			s.commentStartByte = s.byteOffset
-			return &stateMultilineComment{
-				line:  s.line,
-				index: mmIndex,
-			}, nil
-		case lcLen == maxLen && strsLen == maxLen && mmLen < maxLen:
+		case lcLen == maxLen && strsLen == maxLen:
 			s.commentStartByte = s.byteOffset
 			return &stateLineCommentOrString{
 				lcIndex: lcIndex,
 				sIndex:  sIndex,
 			}, nil
-		default:
+		case lcLen == maxLen:
 			s.commentStartByte = s.byteOffset
-			return &stateMultilineComment{
-				line:  s.line,
-				index: mmIndex,
+			return &stateLineComment{
+				index: lcIndex,
+			}, nil
+		default:
+			return &stateString{
+				index: sIndex,
 			}, nil
 		}
 	}

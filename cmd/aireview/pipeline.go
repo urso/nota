@@ -77,25 +77,22 @@ func expandByteRange(content []byte, start, end int64) deleter.ByteRange {
 		return deleter.ByteRange{Start: start, End: end}
 	}
 
-	s := start
-	e := end
-
-	// Scan backward: check if all bytes from start-of-line to Start are whitespace.
-	lineStart := s
+	// Scan backward: find start of line and check if prefix is all whitespace.
+	lineStart := start
 	for lineStart > 0 && content[lineStart-1] != '\n' {
 		lineStart--
 	}
 
 	allWhitespaceBefore := true
-	for i := lineStart; i < s; i++ {
+	for i := lineStart; i < start; i++ {
 		if content[i] != ' ' && content[i] != '\t' {
 			allWhitespaceBefore = false
 			break
 		}
 	}
 
-	// Scan forward: check if bytes after End are whitespace followed by newline or EOF.
-	lineEnd := e
+	// Scan forward: skip whitespace after End until newline or non-whitespace.
+	lineEnd := end
 	for lineEnd < int64(len(content)) && content[lineEnd] != '\n' {
 		if content[lineEnd] != ' ' && content[lineEnd] != '\t' && content[lineEnd] != '\r' {
 			break
@@ -103,27 +100,23 @@ func expandByteRange(content []byte, start, end int64) deleter.ByteRange {
 		lineEnd++
 	}
 
-	allWhitespaceAfter := true
-	for i := e; i < lineEnd; i++ {
-		if content[i] != ' ' && content[i] != '\t' && content[i] != '\r' {
-			allWhitespaceAfter = false
-			break
-		}
-	}
+	// The forward scan only advanced past whitespace, so if we reached
+	// a newline or EOF, everything after the comment is whitespace.
+	allWhitespaceAfter := lineEnd >= int64(len(content)) || content[lineEnd] == '\n'
 
 	if allWhitespaceBefore && allWhitespaceAfter {
 		// Comment-only line: delete from start of line through newline.
-		s = lineStart
-		e = lineEnd
-		if e < int64(len(content)) && content[e] == '\n' {
-			e++
+		start = lineStart
+		end = lineEnd
+		if end < int64(len(content)) && content[end] == '\n' {
+			end++
 		}
 	} else if !allWhitespaceBefore {
 		// Trailing comment: trim whitespace between code and comment marker.
-		for s > lineStart && (content[s-1] == ' ' || content[s-1] == '\t') {
-			s--
+		for start > lineStart && (content[start-1] == ' ' || content[start-1] == '\t') {
+			start--
 		}
 	}
 
-	return deleter.ByteRange{Start: s, End: e}
+	return deleter.ByteRange{Start: start, End: end}
 }

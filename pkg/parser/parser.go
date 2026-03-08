@@ -162,10 +162,8 @@ func (t *TagScanner) parseComment(c *scanner.Comment) *ReviewComment {
 		extra := strings.TrimSpace(m[3])
 
 		if extra != "" {
-			// For the warning, show the text without the comment marker prefix.
-			cleanText := strings.TrimSpace(stripCommentMarker(innerText, c))
 			fmt.Fprintf(os.Stderr, "warning: extra tokens after name in %q at %s:%d (using %q)\n",
-				cleanText, t.filePath, c.Line, name)
+				strings.TrimSpace(innerText), t.filePath, c.Line, name)
 		}
 
 		return &ReviewComment{
