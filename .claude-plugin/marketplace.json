@@ -1,0 +1,13 @@
+{
+  "name": "urso-plugins",
+  "owner": {
+    "name": "urso"
+  },
+  "plugins": [
+    {
+      "name": "aireview",
+      "source": "./",
+      "description": "Extract and manage structured code review comments from source code"
+    }
+  ]
+}
