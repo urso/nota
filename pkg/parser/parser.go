@@ -120,6 +120,13 @@ func (t *TagScanner) parseComment(c *scanner.Comment) *ReviewComment {
 		if len(lines) > 1 {
 			continuationLines = strings.Split(lines[1], "\n")
 		}
+	} else if c.Multiline && c.LineConfig != nil {
+		// Merged consecutive line comments: each line is prefixed with the marker.
+		lines := strings.Split(text, "\n")
+		innerText = stripCommentMarker(lines[0], c)
+		for _, line := range lines[1:] {
+			continuationLines = append(continuationLines, stripCommentMarker(line, c))
+		}
 	} else {
 		// F10: Strip line comment marker before matching so "//review:" works like "// review:".
 		innerText = stripCommentMarker(text, c)

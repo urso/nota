@@ -811,7 +811,9 @@ func TestCaseSensitiveTags(t *testing.T) {
 	goFile := writeTestFile(t, dir, "case.go", `package main
 
 // Review: capitalized
+
 // REVIEW: uppercase
+
 // review: lowercase
 func hello() {}
 `)
@@ -827,6 +829,139 @@ func hello() {}
 	}
 	if comments[0].Message != "lowercase" {
 		t.Errorf("expected message 'lowercase', got %q", comments[0].Message)
+	}
+}
+
+// --- merged line comment tests ---
+
+func TestMultiLineReviewCommentMerged(t *testing.T) {
+	dir := t.TempDir()
+
+	goFile := writeTestFile(t, dir, "multi.go", `package main
+
+// review: first line
+// continuation here
+func hello() {}
+`)
+
+	comments, _, ranges, _, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(comments) != 1 {
+		t.Fatalf("expected 1 comment, got %d", len(comments))
+	}
+
+	if comments[0].Message != "first line continuation here" {
+		t.Errorf("expected merged message, got %q", comments[0].Message)
+	}
+
+	if comments[0].Line != 3 {
+		t.Errorf("expected line 3, got %d", comments[0].Line)
+	}
+
+	if comments[0].EndLine != 4 {
+		t.Errorf("expected end line 4, got %d", comments[0].EndLine)
+	}
+
+	// Byte range should cover both comment lines.
+	if len(ranges[goFile]) != 1 {
+		t.Fatalf("expected 1 byte range, got %d", len(ranges[goFile]))
+	}
+}
+
+func TestMultiLineReviewCommentDeletesBothLines(t *testing.T) {
+	dir := t.TempDir()
+
+	goFile := writeTestFile(t, dir, "delete.go", `package main
+
+// review: should be removed
+// along with this line
+func hello() {}
+`)
+
+	_, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := deleteFromFiles(fileContents, fileRanges, filePerms); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := os.ReadFile(goFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := "package main\n\nfunc hello() {}\n"
+	if string(after) != expected {
+		t.Errorf("after delete:\ngot:  %q\nwant: %q", string(after), expected)
+	}
+}
+
+func TestMultiLineReviewSeparatedByBlankLine(t *testing.T) {
+	dir := t.TempDir()
+
+	goFile := writeTestFile(t, dir, "sep.go", `package main
+
+// review: first block
+// continues
+
+// review: second block
+// also continues
+func hello() {}
+`)
+
+	comments, _, _, _, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(comments) != 2 {
+		t.Fatalf("expected 2 comments, got %d", len(comments))
+	}
+
+	if comments[0].Message != "first block continues" {
+		t.Errorf("comment[0] message = %q", comments[0].Message)
+	}
+
+	if comments[1].Message != "second block also continues" {
+		t.Errorf("comment[1] message = %q", comments[1].Message)
+	}
+}
+
+func TestMultiLineReviewDifferentIndentNotMerged(t *testing.T) {
+	dir := t.TempDir()
+
+	goFile := writeTestFile(t, dir, "indent.go", `package main
+
+func hello() {
+	// review: indented
+	// continues
+	x := 1
+		// review: deeper indent
+		// continues
+	_ = x
+}
+`)
+
+	comments, _, _, _, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(comments) != 2 {
+		t.Fatalf("expected 2 comments, got %d", len(comments))
+	}
+
+	if comments[0].Message != "indented continues" {
+		t.Errorf("comment[0] message = %q", comments[0].Message)
+	}
+
+	if comments[1].Message != "deeper indent continues" {
+		t.Errorf("comment[1] message = %q", comments[1].Message)
 	}
 }
 

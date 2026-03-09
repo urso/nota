@@ -46,7 +46,8 @@ func processFiles(files []string) ([]parser.ReviewComment, map[string][]byte, ma
 		// The scanner's byte offsets refer to positions in decoded content.
 		fileContents[filePath] = result.DecodedContents
 
-		ts := parser.NewTagScanner(result.Scanner, filePath)
+		merged := scanner.NewMergeLineComments(result.Scanner, result.DecodedContents)
+		ts := parser.NewTagScanner(merged, filePath)
 
 		for ts.Scan() {
 			rc := ts.Next()
