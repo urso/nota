@@ -1050,3 +1050,412 @@ func TestWriteOutput(t *testing.T) {
 		}
 	})
 }
+
+// --- Extract --dir tracking file tests ---
+
+func TestExtractDirNamedGroup(t *testing.T) {
+	srcDir := t.TempDir()
+	outDir := filepath.Join(t.TempDir(), ".aireview")
+
+	goFile := writeTestFile(t, srcDir, "auth.go", `package auth
+
+// review(auth): check token expiry
+func validate() {
+	token := getToken()
+	return token.Valid()
+}
+
+// discuss(auth): is this safe?
+func other() {}
+`)
+
+	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 3)
+
+	if err := writeTrackingFiles(outDir, groups); err != nil {
+		t.Fatal(err)
+	}
+
+	// Named group "auth" should produce auth.md.
+	authFile := filepath.Join(outDir, "auth.md")
+	content, err := os.ReadFile(authFile)
+	if err != nil {
+		t.Fatalf("expected auth.md to exist: %v", err)
+	}
+
+	s := string(content)
+
+	// Check frontmatter.
+	if !strings.Contains(s, "status: open") {
+		t.Error("missing status: open in frontmatter")
+	}
+	if !strings.Contains(s, "group: auth") {
+		t.Error("missing group: auth in frontmatter")
+	}
+
+	// Check section headings (## not ###).
+	if !strings.Contains(s, "## review —") {
+		t.Error("missing ## review heading")
+	}
+	if !strings.Contains(s, "## discuss —") {
+		t.Error("missing ## discuss heading")
+	}
+	if !strings.Contains(s, "check token expiry") {
+		t.Error("missing review comment text")
+	}
+}
+
+func TestExtractDirUnnamedGroups(t *testing.T) {
+	srcDir := t.TempDir()
+	outDir := filepath.Join(t.TempDir(), ".aireview")
+
+	goFile := writeTestFile(t, srcDir, "code.go", `package main
+
+// review: standalone one
+func first() {}
+
+// explain: why this
+func second() {}
+`)
+
+	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 2)
+
+	if err := writeTrackingFiles(outDir, groups); err != nil {
+		t.Fatal(err)
+	}
+
+	// Unnamed groups should produce review-001.md, review-002.md.
+	f1 := filepath.Join(outDir, "review-001.md")
+	f2 := filepath.Join(outDir, "review-002.md")
+
+	c1, err := os.ReadFile(f1)
+	if err != nil {
+		t.Fatalf("expected review-001.md: %v", err)
+	}
+	c2, err := os.ReadFile(f2)
+	if err != nil {
+		t.Fatalf("expected review-002.md: %v", err)
+	}
+
+	// Each should have frontmatter with status: open and no group field.
+	for _, c := range [][]byte{c1, c2} {
+		s := string(c)
+		if !strings.Contains(s, "status: open") {
+			t.Error("missing status: open")
+		}
+		if strings.Contains(s, "group:") {
+			t.Error("unnamed group should not have group: in frontmatter")
+		}
+	}
+}
+
+func TestExtractDirAppendToExisting(t *testing.T) {
+	outDir := t.TempDir()
+
+	// Pre-create an existing tracking file.
+	existing := "---\nstatus: open\ngroup: auth\n---\n\n## review — old.go:10\n\nold comment\n\n"
+	if err := os.WriteFile(filepath.Join(outDir, "auth.md"), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srcDir := t.TempDir()
+	goFile := writeTestFile(t, srcDir, "new.go", `package auth
+
+// review(auth): new comment
+func newFunc() {}
+`)
+
+	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 2)
+
+	if err := writeTrackingFiles(outDir, groups); err != nil {
+		t.Fatal(err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(outDir, "auth.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := string(content)
+
+	// Should contain both old and new content.
+	if !strings.Contains(s, "old comment") {
+		t.Error("existing content was lost")
+	}
+	if !strings.Contains(s, "new comment") {
+		t.Error("new content was not appended")
+	}
+}
+
+func TestExtractDirReopensResolvedFile(t *testing.T) {
+	outDir := t.TempDir()
+
+	// Pre-create a resolved tracking file.
+	resolved := "---\nstatus: resolved\ngroup: auth\n---\n\n## [resolved] review — old.go:10\n\nold comment\n\n"
+	if err := os.WriteFile(filepath.Join(outDir, "auth.md"), []byte(resolved), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srcDir := t.TempDir()
+	goFile := writeTestFile(t, srcDir, "new.go", `package auth
+
+// review(auth): new comment
+func newFunc() {}
+`)
+
+	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 2)
+
+	if err := writeTrackingFiles(outDir, groups); err != nil {
+		t.Fatal(err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(outDir, "auth.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := string(content)
+
+	// Status should be reopened.
+	if strings.Contains(s, "status: resolved") {
+		t.Error("file should have been reopened")
+	}
+	if !strings.Contains(s, "status: open") {
+		t.Error("missing status: open after reopen")
+	}
+	if !strings.Contains(s, "new comment") {
+		t.Error("new content was not appended")
+	}
+}
+
+func TestExtractDirReviewNumbering(t *testing.T) {
+	outDir := t.TempDir()
+
+	// Pre-create review-001.md and review-003.md.
+	for _, name := range []string{"review-001.md", "review-003.md"} {
+		if err := os.WriteFile(filepath.Join(outDir, name), []byte("---\nstatus: open\n---\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	srcDir := t.TempDir()
+	goFile := writeTestFile(t, srcDir, "code.go", `package main
+
+// review: new standalone
+func hello() {}
+`)
+
+	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 2)
+
+	if err := writeTrackingFiles(outDir, groups); err != nil {
+		t.Fatal(err)
+	}
+
+	// Should use review-004.md (max existing is 003).
+	f := filepath.Join(outDir, "review-004.md")
+	if _, err := os.Stat(f); os.IsNotExist(err) {
+		t.Error("expected review-004.md to be created")
+	}
+}
+
+func TestExtractDirMixedNamedAndUnnamed(t *testing.T) {
+	srcDir := t.TempDir()
+	outDir := filepath.Join(t.TempDir(), ".aireview")
+
+	goFile := writeTestFile(t, srcDir, "code.go", `package main
+
+// review(api): check error handling
+func handleRequest() {}
+
+// review: standalone fix
+func other() {}
+`)
+
+	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 2)
+
+	if err := writeTrackingFiles(outDir, groups); err != nil {
+		t.Fatal(err)
+	}
+
+	// Named group produces api.md.
+	if _, err := os.Stat(filepath.Join(outDir, "api.md")); os.IsNotExist(err) {
+		t.Error("expected api.md")
+	}
+
+	// Unnamed group produces review-001.md.
+	if _, err := os.Stat(filepath.Join(outDir, "review-001.md")); os.IsNotExist(err) {
+		t.Error("expected review-001.md")
+	}
+}
+
+func TestExtractDirWithDelete(t *testing.T) {
+	srcDir := t.TempDir()
+	outDir := filepath.Join(t.TempDir(), ".aireview")
+
+	goFile := writeTestFile(t, srcDir, "code.go", `package main
+
+// review(api): check error handling
+func handleRequest() {
+	resp := doRequest()
+	return resp
+}
+`)
+
+	comments, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 3)
+
+	// Write tracking files.
+	if err := writeTrackingFiles(outDir, groups); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete comments from source.
+	if err := deleteFromFiles(fileContents, fileRanges, filePerms); err != nil {
+		t.Fatal(err)
+	}
+
+	// Tracking file should exist with content.
+	trackingContent, err := os.ReadFile(filepath.Join(outDir, "api.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(trackingContent), "check error handling") {
+		t.Error("tracking file missing comment")
+	}
+
+	// Source file should have comment removed.
+	srcContent, err := os.ReadFile(goFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(srcContent), "review") {
+		t.Error("comment not deleted from source")
+	}
+	if !strings.Contains(string(srcContent), "func handleRequest()") {
+		t.Error("code incorrectly removed from source")
+	}
+}
+
+func TestExtractDirPathTraversalRejected(t *testing.T) {
+	outDir := t.TempDir()
+
+	badNames := []string{
+		"../escape",
+		"../../etc/evil",
+		"sub/dir",
+		"back\\slash",
+		"..",
+		".",
+	}
+
+	for _, name := range badNames {
+		t.Run(name, func(t *testing.T) {
+			groups := []grouper.Group{
+				{Name: name, Entries: []grouper.Entry{{Tag: "review", File: "test.go", Line: 1, Comment: "test"}}},
+			}
+			err := writeTrackingFiles(outDir, groups)
+			if err == nil {
+				t.Errorf("expected error for group name %q, got nil", name)
+			}
+		})
+	}
+}
+
+func TestExtractDirInvalidFilenameCharsRejected(t *testing.T) {
+	outDir := t.TempDir()
+
+	badChars := []string{"col:on", "less<than", "great>than", "pi|pe", "star*isk", "quest?ion", `qu"ote`}
+
+	for _, name := range badChars {
+		t.Run(name, func(t *testing.T) {
+			groups := []grouper.Group{
+				{Name: name, Entries: []grouper.Entry{{Tag: "review", File: "test.go", Line: 1, Comment: "test"}}},
+			}
+			err := writeTrackingFiles(outDir, groups)
+			if err == nil {
+				t.Errorf("expected error for group name %q, got nil", name)
+			}
+		})
+	}
+}
+
+func TestReopenIfResolvedOnlyChangesFrontmatter(t *testing.T) {
+	// File where "status: resolved" appears both in frontmatter and body.
+	content := []byte("---\nstatus: resolved\ngroup: auth\n---\n\n## review — test.go:1\n\nThe status: resolved field should not change\n")
+
+	result := reopenIfResolved(content)
+	s := string(result)
+
+	// Frontmatter should be reopened.
+	if !strings.Contains(s, "status: open\ngroup: auth\n---") {
+		t.Error("frontmatter status was not changed to open")
+	}
+
+	// Body text should NOT be modified.
+	if !strings.Contains(s, "The status: resolved field should not change") {
+		t.Error("body text was incorrectly modified")
+	}
+}
+
+func TestExtractDirNoComments(t *testing.T) {
+	srcDir := t.TempDir()
+	outDir := filepath.Join(t.TempDir(), ".aireview")
+
+	goFile := writeTestFile(t, srcDir, "clean.go", `package main
+
+func hello() {}
+`)
+
+	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 3)
+
+	if err := writeTrackingFiles(outDir, groups); err != nil {
+		t.Fatal(err)
+	}
+
+	// Directory should be created but empty.
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected empty dir, got %d entries", len(entries))
+	}
+}

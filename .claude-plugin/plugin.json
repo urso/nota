@@ -1,0 +1,7 @@
+{
+  "name": "aireview",
+  "version": "0.1.0",
+  "description": "Extract and manage structured code review comments from source code",
+  "repository": "https://github.com/urso/aireview",
+  "license": "MIT"
+}
