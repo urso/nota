@@ -122,7 +122,7 @@ func TestListFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		expected := []string{"committed.go", "staged.go"}
+		expected := []string{"committed.go", "staged.go", "untracked.go"}
 		if diff := cmp.Diff(expected, files); diff != "" {
 			t.Errorf("files mismatch (-want +got):\n%s", diff)
 		}

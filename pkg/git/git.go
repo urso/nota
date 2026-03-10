@@ -64,8 +64,11 @@ func ListFiles(scope Scope, dir string) ([]string, error) {
 			return nil, err
 		}
 	case ScopeAll:
-		// all tracked files
+		// all tracked + untracked files
 		if err := addGitFiles(set, root, "ls-files"); err != nil {
+			return nil, err
+		}
+		if err := addGitFiles(set, root, "ls-files", "--others", "--exclude-standard"); err != nil {
 			return nil, err
 		}
 	default:
