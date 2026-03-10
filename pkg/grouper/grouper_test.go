@@ -9,6 +9,10 @@ import (
 	"github.com/urso/nota/pkg/parser"
 )
 
+func splitLines(content []byte) [][]byte {
+	return bytes.Split(content, []byte("\n"))
+}
+
 func TestExtractContext(t *testing.T) {
 	content := []byte("line1\nline2\nline3\nline4\nline5\nline6\nline7\n")
 
@@ -98,7 +102,7 @@ func TestExtractContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractContext(tt.content, tt.startLine, tt.endLine, tt.maxLines)
+			got := extractContext(splitLines(tt.content), tt.startLine, tt.endLine, tt.maxLines)
 			if diff := cmp.Diff(tt.expected, got); diff != "" {
 				t.Errorf("context mismatch (-want +got):\n%s", diff)
 			}

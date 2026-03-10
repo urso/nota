@@ -113,9 +113,9 @@ func resolveFiles(fs *flag.FlagSet, modified, unstaged, staged, all *bool) ([]st
 		return nil, err
 	}
 
-	var files []string
-	for _, f := range gitFiles {
-		files = append(files, filepath.Join(root, f))
+	files := make([]string, len(gitFiles))
+	for i, f := range gitFiles {
+		files[i] = filepath.Join(root, f)
 	}
 
 	return files, nil
@@ -455,7 +455,7 @@ func runBehavior(args []string) error {
 	// No args: output triage table of all known tags.
 	exts, tagSet := extension.LoadAll(localDir)
 
-	var tags []string
+	tags := make([]string, 0, len(tagSet))
 	for tag := range tagSet {
 		tags = append(tags, tag)
 	}

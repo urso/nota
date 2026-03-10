@@ -20,11 +20,11 @@ func DeleteComments(fileContent []byte, ranges []ByteRange) ([]byte, error) {
 		return fileContent, nil
 	}
 
-	// Sort descending by Start so we delete from end-to-back.
+	// Sort ascending by Start for single-pass construction.
 	sorted := make([]ByteRange, len(ranges))
 	copy(sorted, ranges)
 	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Start > sorted[j].Start
+		return sorted[i].Start < sorted[j].Start
 	})
 
 	// F4: Validate all ranges against original content length before any mutations.
@@ -36,20 +36,27 @@ func DeleteComments(fileContent []byte, ranges []ByteRange) ([]byte, error) {
 		}
 	}
 
-	// Validate no overlaps (in descending order, ranges[i].Start should be >= ranges[i+1].End).
+	// Validate no overlaps (ascending order: ranges[i].End should be <= ranges[i+1].Start).
 	for i := 0; i < len(sorted)-1; i++ {
-		if sorted[i].Start < sorted[i+1].End {
+		if sorted[i].End > sorted[i+1].Start {
 			return nil, fmt.Errorf("overlapping byte ranges: [%d,%d) and [%d,%d)",
-				sorted[i+1].Start, sorted[i+1].End, sorted[i].Start, sorted[i].End)
+				sorted[i].Start, sorted[i].End, sorted[i+1].Start, sorted[i+1].End)
 		}
 	}
 
-	result := make([]byte, len(fileContent))
-	copy(result, fileContent)
-
+	// Calculate result size and build in a single pass.
+	var totalDeleted int64
 	for _, r := range sorted {
-		result = append(result[:r.Start], result[r.End:]...)
+		totalDeleted += r.End - r.Start
 	}
+	result := make([]byte, 0, int64(len(fileContent))-totalDeleted)
+
+	var pos int64
+	for _, r := range sorted {
+		result = append(result, fileContent[pos:r.Start]...)
+		pos = r.End
+	}
+	result = append(result, fileContent[pos:]...)
 
 	return result, nil
 }

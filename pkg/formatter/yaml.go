@@ -46,7 +46,7 @@ func ensureContext(before, after []string) yamlContext {
 
 // FormatYAML writes grouped review comments as YAML to w.
 func FormatYAML(w io.Writer, groups []grouper.Group) error {
-	var out []yamlGroup
+	out := make([]yamlGroup, 0, len(groups))
 
 	for _, g := range groups {
 		yg := yamlGroup{Name: g.Name}
@@ -70,10 +70,6 @@ func FormatYAML(w io.Writer, groups []grouper.Group) error {
 		}
 
 		out = append(out, yg)
-	}
-
-	if out == nil {
-		out = []yamlGroup{}
 	}
 
 	enc := yaml.NewEncoder(w)

@@ -1,6 +1,7 @@
 package grouper
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"sort"
@@ -39,6 +40,12 @@ func GroupComments(comments []parser.ReviewComment, files map[string][]byte, con
 	var namedOrder []string
 	var unnamed []Group
 
+	// Pre-split file contents into lines to avoid re-splitting per comment.
+	splitFiles := make(map[string][][]byte, len(files))
+	for path, content := range files {
+		splitFiles[path] = bytes.Split(content, []byte("\n"))
+	}
+
 	// Collect references for second pass.
 	type pendingRef struct {
 		name string
@@ -49,7 +56,7 @@ func GroupComments(comments []parser.ReviewComment, files map[string][]byte, con
 
 	// First pass: collect named groups and unnamed entries.
 	for _, c := range comments {
-		ctx := extractContext(files[c.File], c.Line, c.EndLine, contextLines)
+		ctx := extractContext(splitFiles[c.File], c.Line, c.EndLine, contextLines)
 
 		if c.Tag == parser.TagSee || c.Tag == parser.TagAlso {
 			refs = append(refs, pendingRef{

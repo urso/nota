@@ -1,7 +1,5 @@
 package grouper
 
-import "bytes"
-
 // ContextLines holds surrounding code context for a comment.
 type ContextLines struct {
 	Before []string
@@ -9,14 +7,13 @@ type ContextLines struct {
 }
 
 // extractContext returns surrounding context lines for a comment position.
+// lines is the file content pre-split by newline.
 // maxLines is the maximum lines to extract per side.
 // Stops at blank lines (empty or whitespace-only).
-func extractContext(fileContent []byte, startLine, endLine, maxLines int) ContextLines {
+func extractContext(lines [][]byte, startLine, endLine, maxLines int) ContextLines {
 	if maxLines <= 0 {
 		return ContextLines{}
 	}
-
-	lines := bytes.Split(fileContent, []byte("\n"))
 
 	// Convert 1-indexed lines to 0-indexed.
 	startIdx := startLine - 1
