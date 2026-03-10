@@ -42,11 +42,11 @@ type CommentScanner interface {
 }
 
 var (
-	// patternA matches tag(name): message or tag: message for any lowercase tag name.
-	patternA = regexp.MustCompile(`(?:^|\s)([a-z][a-z0-9_-]*)(?:\(([^)]*)\))?\s*:\s*(.*)`)
+	// patternA matches tag(name): message or tag: message at the start of the comment text.
+	patternA = regexp.MustCompile(`^\s*([a-z][a-z0-9_-]*)(?:\(([^)]*)\))?\s*:\s*(.*)`)
 
-	// patternB matches see: name or also: name
-	patternB = regexp.MustCompile(`(?:^|\s)(see|also)\s*:\s*(\S+)(.*)`)
+	// patternB matches see: name or also: name at the start of the comment text.
+	patternB = regexp.MustCompile(`^\s*(see|also)\s*:\s*(\S+)(.*)`)
 )
 
 // TagScanner wraps a CommentScanner and extracts review tags.

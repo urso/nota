@@ -1,6 +1,6 @@
 {
   "name": "nota",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "description": "Extract and manage structured code review comments from source code",
   "repository": "https://github.com/urso/nota",
   "license": "MIT"
