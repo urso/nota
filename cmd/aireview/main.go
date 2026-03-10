@@ -8,37 +8,45 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/urso/aireview/pkg/deleter"
+	"github.com/urso/aireview/pkg/extension"
 	"github.com/urso/aireview/pkg/formatter"
 	"github.com/urso/aireview/pkg/git"
 	"github.com/urso/aireview/pkg/grouper"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		runList(os.Args[1:])
-		return
+	if err := run(os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
+	if len(args) < 2 {
+		return runList(args[1:])
 	}
 
-	switch os.Args[1] {
+	switch args[1] {
 	case "list":
-		runList(os.Args[2:])
+		return runList(args[2:])
 	case "delete":
-		runDelete(os.Args[2:])
+		return runDelete(args[2:])
 	case "extract":
-		runExtract(os.Args[2:])
+		return runExtract(args[2:])
+	case "behavior":
+		return runBehavior(args[2:])
 	default:
 		// F8: If first arg starts with "-" or looks like a file path, default to list.
 		// Otherwise report an error for unknown subcommands.
-		if strings.HasPrefix(os.Args[1], "-") || looksLikeFilePath(os.Args[1]) {
-			runList(os.Args[1:])
-			return
+		if strings.HasPrefix(args[1], "-") || looksLikeFilePath(args[1]) {
+			return runList(args[1:])
 		}
-		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\nUsage: aireview [list|delete|extract] [flags] [files...]\n", os.Args[1])
-		os.Exit(1)
+		return fmt.Errorf("unknown subcommand: %s\nUsage: aireview [list|delete|extract|behavior] [flags] [files...]", args[1])
 	}
 }
 
@@ -113,32 +121,26 @@ func resolveFiles(fs *flag.FlagSet, modified, unstaged, staged, all *bool) ([]st
 	return files, nil
 }
 
-func runList(args []string) {
+func runList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ExitOnError)
 	format, ctx, modified, unstaged, staged, all := addSharedFlags(fs)
 	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	files, err := resolveFiles(fs, modified, unstaged, staged, all)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
-	comments, fileContents, _, _, err := processFiles(files)
+	_, tagSet := extension.LoadAll(localExtDir())
+	comments, fileContents, _, _, err := processFiles(files, tagSet)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	groups := grouper.GroupComments(comments, fileContents, *ctx)
-
-	if err := writeOutput(os.Stdout, groups, *format); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
+	return writeOutput(os.Stdout, groups, *format)
 }
 
 // F2: Use content already read by processFiles instead of re-reading.
@@ -171,51 +173,44 @@ func deleteFromFiles(fileContents map[string][]byte, fileRanges map[string][]del
 	return nil
 }
 
-func runDelete(args []string) {
+func runDelete(args []string) error {
 	fs := flag.NewFlagSet("delete", flag.ExitOnError)
 	_, _, modified, unstaged, staged, all := addSharedFlags(fs)
 	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	files, err := resolveFiles(fs, modified, unstaged, staged, all)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
-	_, fileContents, fileRanges, filePerms, err := processFiles(files)
+	_, tagSet := extension.LoadAll(localExtDir())
+	_, fileContents, fileRanges, filePerms, err := processFiles(files, tagSet)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
-	if err := deleteFromFiles(fileContents, fileRanges, filePerms); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
+	return deleteFromFiles(fileContents, fileRanges, filePerms)
 }
 
-func runExtract(args []string) {
+func runExtract(args []string) error {
 	fs := flag.NewFlagSet("extract", flag.ExitOnError)
 	format, ctx, modified, unstaged, staged, all := addSharedFlags(fs)
 	dir := fs.String("dir", "", "Write tracking files to directory (e.g. .aireview/)")
 	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	files, err := resolveFiles(fs, modified, unstaged, staged, all)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
-	comments, fileContents, fileRanges, filePerms, err := processFiles(files)
+	_, tagSet := extension.LoadAll(localExtDir())
+	comments, fileContents, fileRanges, filePerms, err := processFiles(files, tagSet)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	groups := grouper.GroupComments(comments, fileContents, *ctx)
@@ -226,14 +221,12 @@ func runExtract(args []string) {
 			fmt.Fprintf(os.Stderr, "warning: --format is ignored when --dir is used\n")
 		}
 		if err := writeTrackingFiles(*dir, groups); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 	} else {
 		// Default mode: stdout + backup.
 		if err := writeOutput(os.Stdout, groups, *format); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		// F3: Write backup BEFORE deleting, so interruption after delete still has backup.
@@ -254,15 +247,12 @@ func runExtract(args []string) {
 	}
 
 	// Delete comments from files.
-	if err := deleteFromFiles(fileContents, fileRanges, filePerms); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
+	return deleteFromFiles(fileContents, fileRanges, filePerms)
 }
 
 var (
-	reReviewFile    = regexp.MustCompile(`^review-(\d+)\.md$`)
-	reFrontmatter   = regexp.MustCompile(`(?s)\A---\n(.*?\n)---\n`)
+	reReviewFile     = regexp.MustCompile(`^review-(\d+)\.md$`)
+	reFrontmatter    = regexp.MustCompile(`(?s)\A---\n(.*?\n)---\n`)
 	reStatusResolved = regexp.MustCompile(`(?m)^status:\s*resolved\s*$`)
 )
 
@@ -416,6 +406,73 @@ func reopenIfResolved(content []byte) []byte {
 	result = append(result, updated...)
 	result = append(result, content[loc[1]:]...)
 	return result
+}
+
+// repoRoot returns the git repository root path, or "" if not in a git repo.
+func repoRoot() string {
+	root, err := git.RepoRoot("")
+	if err != nil {
+		return ""
+	}
+	return root
+}
+
+// localExtDir returns the .aireview directory path based on repo root.
+func localExtDir() string {
+	if root := repoRoot(); root != "" {
+		return filepath.Join(root, ".aireview")
+	}
+	return ".aireview"
+}
+
+func runBehavior(args []string) error {
+	fs := flag.NewFlagSet("behavior", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: aireview behavior [tagname]\n\n")
+		fmt.Fprintf(os.Stderr, "With no arguments, outputs a table of all known tags and behaviors.\n")
+		fmt.Fprintf(os.Stderr, "With a tag name, outputs the behavior text for that tag.\n")
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if fs.NArg() > 1 {
+		fs.Usage()
+		return fmt.Errorf("too many arguments")
+	}
+
+	localDir := localExtDir()
+
+	if fs.NArg() == 1 {
+		ext := extension.LoadExtension(fs.Arg(0), localDir)
+		if ext == nil {
+			return fmt.Errorf("unknown tag: %s", args[0])
+		}
+		fmt.Println(ext.Behavior)
+		return nil
+	}
+
+	// No args: output triage table of all known tags.
+	exts, tagSet := extension.LoadAll(localDir)
+
+	var tags []string
+	for tag := range tagSet {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+
+	for _, tag := range tags {
+		if ext, ok := exts[tag]; ok {
+			// Collapse newlines to spaces for one-line-per-tag format.
+			behavior := strings.ReplaceAll(ext.Behavior, "\n", " ")
+			fmt.Printf("%s\t%s\n", tag, behavior)
+		} else {
+			// see/also are in TagSet but not in the extension map.
+			fmt.Printf("%s\t(cross-reference)\n", tag)
+		}
+	}
+
+	return nil
 }
 
 func writeOutput(w io.Writer, groups []grouper.Group, format string) error {

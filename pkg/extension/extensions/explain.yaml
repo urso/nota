@@ -1,0 +1,3 @@
+tag: explain
+behavior: |
+  Explain the reasoning behind the annotated code. Check if the developer is satisfied. This may turn into a discussion or code change.

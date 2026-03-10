@@ -1,0 +1,3 @@
+tag: doc
+behavior: |
+  Write or improve documentation for the annotated code. Add doc-comments, update README sections, or create usage examples as appropriate.

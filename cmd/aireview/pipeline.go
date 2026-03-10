@@ -13,7 +13,8 @@ import (
 // processFiles runs scan → parse for each file, returns comments, file contents, and byte ranges.
 // The returned fileContents contains the decoded (UTF-8) content that matches the scanner's byte offsets.
 // The returned filePerms contains the original file permissions for atomic writes.
-func processFiles(files []string) ([]parser.ReviewComment, map[string][]byte, map[string][]deleter.ByteRange, map[string]os.FileMode, error) {
+// When knownTags is non-nil, only tags in the set are accepted; otherwise all tags pass through.
+func processFiles(files []string, knownTags map[string]struct{}) ([]parser.ReviewComment, map[string][]byte, map[string][]deleter.ByteRange, map[string]os.FileMode, error) {
 	var allComments []parser.ReviewComment
 	fileContents := make(map[string][]byte)
 	fileRanges := make(map[string][]deleter.ByteRange)
@@ -47,7 +48,12 @@ func processFiles(files []string) ([]parser.ReviewComment, map[string][]byte, ma
 		fileContents[filePath] = result.DecodedContents
 
 		merged := scanner.NewMergeLineComments(result.Scanner, result.DecodedContents)
-		ts := parser.NewTagScanner(merged, filePath)
+		var ts *parser.TagScanner
+		if knownTags != nil {
+			ts = parser.NewTagScannerWithTags(merged, filePath, knownTags)
+		} else {
+			ts = parser.NewTagScanner(merged, filePath)
+		}
 
 		for ts.Scan() {
 			rc := ts.Next()

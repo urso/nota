@@ -1,0 +1,3 @@
+tag: test
+behavior: |
+  Write tests for the annotated code. Cover edge cases, error paths, and boundary conditions. Follow existing test patterns in the project.

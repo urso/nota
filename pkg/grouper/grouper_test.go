@@ -230,6 +230,39 @@ func TestGroupComments(t *testing.T) {
 		}
 	})
 
+	t.Run("critique tag routes to Entries", func(t *testing.T) {
+		comments := []parser.ReviewComment{
+			{Tag: parser.Tag("critique"), Name: "perf", Message: "check allocation", File: "a.go", Line: 3, EndLine: 3},
+		}
+		files := map[string][]byte{"a.go": fileA}
+		groups := GroupComments(comments, files, 0)
+
+		if len(groups) != 1 {
+			t.Fatalf("expected 1 group, got %d", len(groups))
+		}
+		if len(groups[0].Entries) != 1 {
+			t.Errorf("expected 1 entry, got %d", len(groups[0].Entries))
+		}
+		if groups[0].Entries[0].Tag != parser.Tag("critique") {
+			t.Errorf("expected tag critique, got %s", groups[0].Entries[0].Tag)
+		}
+	})
+
+	t.Run("impl tag routes to Entries", func(t *testing.T) {
+		comments := []parser.ReviewComment{
+			{Tag: parser.Tag("impl"), Name: "", Message: "implement this", File: "a.go", Line: 3, EndLine: 3},
+		}
+		files := map[string][]byte{"a.go": fileA}
+		groups := GroupComments(comments, files, 0)
+
+		if len(groups) != 1 {
+			t.Fatalf("expected 1 group, got %d", len(groups))
+		}
+		if len(groups[0].Entries) != 1 {
+			t.Errorf("expected 1 entry, got %d", len(groups[0].Entries))
+		}
+	})
+
 	t.Run("multiple tags same name", func(t *testing.T) {
 		comments := []parser.ReviewComment{
 			{Tag: parser.TagReview, Name: "auth", Message: "review it", File: "a.go", Line: 3, EndLine: 3},

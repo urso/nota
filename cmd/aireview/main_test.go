@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/urso/aireview/pkg/deleter"
+	"github.com/urso/aireview/pkg/extension"
 	"github.com/urso/aireview/pkg/formatter"
 	"github.com/urso/aireview/pkg/grouper"
 	"github.com/urso/aireview/pkg/parser"
@@ -58,7 +59,7 @@ def helper():
     pass
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile, pyFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile, pyFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +121,7 @@ def helper():
     pass
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile, pyFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile, pyFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +215,7 @@ func hello() {
 }
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +248,7 @@ func TestFullPipelineDelete(t *testing.T) {
 	src := "package main\n\n// review(fix): remove this\nfunc hello() {\n\treturn\n}\n"
 	goFile := writeTestFile(t, dir, "code.go", src)
 
-	_, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile})
+	_, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +286,7 @@ func third() {}
 `
 	goFile := writeTestFile(t, dir, "multi.go", src)
 
-	comments, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile})
+	comments, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +319,7 @@ func TestFullPipelineDeletePreservesPermissions(t *testing.T) {
 	goFile := writeTestFileWithPerm(t, dir, "perm.go",
 		"package main\n// review: delete me\nfunc hello() {}\n", 0o755)
 
-	_, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile})
+	_, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +342,7 @@ func TestCommentOnlyLineFullyRemoved(t *testing.T) {
 	dir := t.TempDir()
 	goFile := writeTestFile(t, dir, "code.go", "package main\n\n    // review: msg\nfunc hello() {}\n")
 
-	_, fileContents, fileRanges, _, err := processFiles([]string{goFile})
+	_, fileContents, fileRanges, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +362,7 @@ func TestTrailingCommentPreservesCode(t *testing.T) {
 	dir := t.TempDir()
 	goFile := writeTestFile(t, dir, "code.go", "package main\n\nx := 1 // review: msg\nfunc hello() {}\n")
 
-	_, fileContents, fileRanges, _, err := processFiles([]string{goFile})
+	_, fileContents, fileRanges, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +395,7 @@ def other():
     pass
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{pyFile})
+	comments, fileContents, _, _, err := processFiles([]string{pyFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -427,7 +428,7 @@ func TestPythonDeleteComments(t *testing.T) {
 
 	pyFile := writeTestFile(t, dir, "app.py", "# review: delete me\ndef hello():\n    pass\n")
 
-	_, fileContents, fileRanges, filePerms, err := processFiles([]string{pyFile})
+	_, fileContents, fileRanges, filePerms, err := processFiles([]string{pyFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,7 +464,7 @@ int main() {
 }
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{cFile})
+	comments, fileContents, _, _, err := processFiles([]string{cFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,7 +506,7 @@ func TestCBlockCommentDelete(t *testing.T) {
 
 	cFile := writeTestFile(t, dir, "main.c", "#include <stdio.h>\n\n/* review: remove */\nint main() {\n    return 0;\n}\n")
 
-	_, fileContents, fileRanges, filePerms, err := processFiles([]string{cFile})
+	_, fileContents, fileRanges, filePerms, err := processFiles([]string{cFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,7 +540,7 @@ class Auth
 end
 `)
 
-	comments, _, _, _, err := processFiles([]string{rbFile})
+	comments, _, _, _, err := processFiles([]string{rbFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -575,7 +576,7 @@ def audit():
     pass
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{file1, file2, file3})
+	comments, fileContents, _, _, err := processFiles([]string{file1, file2, file3}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,7 +619,7 @@ func TestCrossFileDeleteAcrossFiles(t *testing.T) {
 	file1 := writeTestFile(t, dir, "a.go", "package main\n\n// review(x): comment a\nfunc a() {}\n")
 	file2 := writeTestFile(t, dir, "b.go", "package main\n\n// review(x): comment b\nfunc b() {}\n")
 
-	_, fileContents, fileRanges, filePerms, err := processFiles([]string{file1, file2})
+	_, fileContents, fileRanges, filePerms, err := processFiles([]string{file1, file2}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -653,7 +654,7 @@ func handleRequest() {
 }
 `)
 
-	comments, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile})
+	comments, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -713,7 +714,7 @@ func TestNoCommentsProducesEmptyOutput(t *testing.T) {
 func hello() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -762,7 +763,7 @@ func TestBinaryFileSkipped(t *testing.T) {
 
 	goodFile := writeTestFile(t, dir, "good.go", "package main\n// review: msg\n")
 
-	comments, _, _, _, err := processFiles([]string{binPath, goodFile})
+	comments, _, _, _, err := processFiles([]string{binPath, goodFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -778,7 +779,7 @@ func TestUnreadableFileSkipped(t *testing.T) {
 	goodFile := writeTestFile(t, dir, "good.go", "package main\n// review: msg\n")
 	badFile := filepath.Join(dir, "nonexistent.go")
 
-	comments, _, _, _, err := processFiles([]string{badFile, goodFile})
+	comments, _, _, _, err := processFiles([]string{badFile, goodFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -795,7 +796,7 @@ func TestUnsupportedLanguageSkipped(t *testing.T) {
 	unknownFile := writeTestFile(t, dir, "data.xyz", "review: something\n")
 	goodFile := writeTestFile(t, dir, "good.go", "package main\n// review: msg\n")
 
-	comments, _, _, _, err := processFiles([]string{unknownFile, goodFile})
+	comments, _, _, _, err := processFiles([]string{unknownFile, goodFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -818,7 +819,7 @@ func TestCaseSensitiveTags(t *testing.T) {
 func hello() {}
 `)
 
-	comments, _, _, _, err := processFiles([]string{goFile})
+	comments, _, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -844,7 +845,7 @@ func TestMultiLineReviewCommentMerged(t *testing.T) {
 func hello() {}
 `)
 
-	comments, _, ranges, _, err := processFiles([]string{goFile})
+	comments, _, ranges, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -881,7 +882,7 @@ func TestMultiLineReviewCommentDeletesBothLines(t *testing.T) {
 func hello() {}
 `)
 
-	_, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile})
+	_, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -914,7 +915,7 @@ func TestMultiLineReviewSeparatedByBlankLine(t *testing.T) {
 func hello() {}
 `)
 
-	comments, _, _, _, err := processFiles([]string{goFile})
+	comments, _, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -947,7 +948,7 @@ func hello() {
 }
 `)
 
-	comments, _, _, _, err := processFiles([]string{goFile})
+	comments, _, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -979,7 +980,7 @@ func hello() {}
 func other() {}
 `)
 
-	comments, _, _, _, err := processFiles([]string{goFile})
+	comments, _, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1022,7 +1023,7 @@ func TestProcessFilesReturnsByteRanges(t *testing.T) {
 
 	goFile := writeTestFile(t, dir, "ranges.go", "package main\n\n// review: delete\nfunc hello() {}\n")
 
-	_, _, fileRanges, _, err := processFiles([]string{goFile})
+	_, _, fileRanges, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1204,7 +1205,7 @@ func validate() {
 func other() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1257,7 +1258,7 @@ func first() {}
 func second() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1309,7 +1310,7 @@ func TestExtractDirAppendToExisting(t *testing.T) {
 func newFunc() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1352,7 +1353,7 @@ func TestExtractDirReopensResolvedFile(t *testing.T) {
 func newFunc() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1399,7 +1400,7 @@ func TestExtractDirReviewNumbering(t *testing.T) {
 func hello() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1430,7 +1431,7 @@ func handleRequest() {}
 func other() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1465,7 +1466,7 @@ func handleRequest() {
 }
 `)
 
-	comments, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile})
+	comments, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1574,7 +1575,7 @@ func TestExtractDirNoComments(t *testing.T) {
 func hello() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles([]string{goFile})
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1592,5 +1593,394 @@ func hello() {}
 	}
 	if len(entries) != 0 {
 		t.Errorf("expected empty dir, got %d entries", len(entries))
+	}
+}
+
+// --- Extension system integration tests ---
+
+func TestExtensionTagExtracted(t *testing.T) {
+	dir := t.TempDir()
+
+	goFile := writeTestFile(t, dir, "code.go", `package main
+
+// critique(perf): check allocation
+func hot() {}
+`)
+
+	// Use knownTags that include "critique".
+	knownTags := map[string]struct{}{
+		"review": {}, "discuss": {}, "explain": {},
+		"critique": {}, "see": {}, "also": {},
+	}
+
+	comments, _, _, _, err := processFiles([]string{goFile}, knownTags)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(comments) != 1 {
+		t.Fatalf("expected 1 comment, got %d", len(comments))
+	}
+	if comments[0].Tag != parser.Tag("critique") {
+		t.Errorf("expected tag critique, got %s", comments[0].Tag)
+	}
+	if comments[0].Name != "perf" {
+		t.Errorf("expected name perf, got %s", comments[0].Name)
+	}
+	if comments[0].Message != "check allocation" {
+		t.Errorf("expected message 'check allocation', got %q", comments[0].Message)
+	}
+}
+
+func TestUnknownTagSkippedWithKnownTags(t *testing.T) {
+	dir := t.TempDir()
+
+	goFile := writeTestFile(t, dir, "code.go", `package main
+
+// todo: fix this later
+
+// note: remember this
+
+// fixme: broken thing
+
+// review: real comment
+func hello() {}
+`)
+
+	knownTags := map[string]struct{}{
+		"review": {}, "discuss": {}, "explain": {},
+		"see": {}, "also": {},
+	}
+
+	comments, _, _, _, err := processFiles([]string{goFile}, knownTags)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Only "review" should be extracted; todo/note/fixme should be skipped.
+	if len(comments) != 1 {
+		t.Fatalf("expected 1 comment, got %d", len(comments))
+	}
+	if comments[0].Tag != parser.TagReview {
+		t.Errorf("expected tag review, got %s", comments[0].Tag)
+	}
+}
+
+func TestExtractDoesNotDeleteUnknownTags(t *testing.T) {
+	dir := t.TempDir()
+
+	goFile := writeTestFile(t, dir, "code.go", "package main\n\n// note: something\n\n// fixme: broken\n\n// review: delete me\nfunc hello() {}\n")
+
+	knownTags := map[string]struct{}{
+		"review": {}, "see": {}, "also": {},
+	}
+
+	_, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile}, knownTags)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := deleteFromFiles(fileContents, fileRanges, filePerms); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := os.ReadFile(goFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := string(result)
+	// review should be deleted.
+	if strings.Contains(got, "// review:") {
+		t.Error("review comment was not deleted")
+	}
+	// note and fixme should NOT be deleted.
+	if !strings.Contains(got, "// note: something") {
+		t.Error("note comment was incorrectly deleted")
+	}
+	if !strings.Contains(got, "// fixme: broken") {
+		t.Error("fixme comment was incorrectly deleted")
+	}
+}
+
+func TestExtensionTagGroupedAsEntry(t *testing.T) {
+	dir := t.TempDir()
+
+	goFile := writeTestFile(t, dir, "code.go", `package main
+
+// critique(perf): check allocation
+func hot() {}
+
+// propose(perf): use a pool
+func other() {}
+`)
+
+	knownTags := map[string]struct{}{
+		"review": {}, "discuss": {}, "explain": {},
+		"critique": {}, "propose": {}, "see": {}, "also": {},
+	}
+
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, knownTags)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 2)
+
+	if len(groups) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(groups))
+	}
+	if groups[0].Name != "perf" {
+		t.Errorf("expected group name perf, got %q", groups[0].Name)
+	}
+	if len(groups[0].Entries) != 2 {
+		t.Errorf("expected 2 entries, got %d", len(groups[0].Entries))
+	}
+}
+
+func TestBehaviorSubcommandTable(t *testing.T) {
+	// Capture stdout from runBehavior with no args.
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runBehavior(nil)
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	out := buf.String()
+
+	// Should contain embedded tags.
+	if !strings.Contains(out, "review\t") {
+		t.Error("missing review in triage table")
+	}
+	if !strings.Contains(out, "critique\t") {
+		t.Error("missing critique in triage table")
+	}
+	// Should contain see/also as cross-reference.
+	if !strings.Contains(out, "see\t(cross-reference)") {
+		t.Error("missing see cross-reference in triage table")
+	}
+	if !strings.Contains(out, "also\t(cross-reference)") {
+		t.Error("missing also cross-reference in triage table")
+	}
+}
+
+func TestBehaviorSubcommandSingleTag(t *testing.T) {
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runBehavior([]string{"review"})
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	out := strings.TrimSpace(buf.String())
+
+	if out == "" {
+		t.Error("expected non-empty behavior for review")
+	}
+}
+
+func TestBehaviorSubcommandSee(t *testing.T) {
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runBehavior([]string{"see"})
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	out := strings.TrimSpace(buf.String())
+
+	if out != "(cross-reference)" {
+		t.Errorf("expected (cross-reference), got %q", out)
+	}
+}
+
+func TestBehaviorSubcommandUnknown(t *testing.T) {
+	err := runBehavior([]string{"nonexistent_tag_xyz"})
+	if err == nil {
+		t.Error("expected error for unknown tag")
+	}
+}
+
+func TestBehaviorSubcommandTooManyArgs(t *testing.T) {
+	err := runBehavior([]string{"a", "b"})
+	if err == nil {
+		t.Error("expected error for too many args")
+	}
+}
+
+// --- E2E tests using extension.LoadAll() ---
+
+func TestE2EExtensionTagWithLoadAll(t *testing.T) {
+	dir := t.TempDir()
+
+	goFile := writeTestFile(t, dir, "code.go", `package main
+
+// critique(perf): check allocation
+func hot() {}
+
+// propose(perf): use a pool
+func other() {}
+
+// todo: not extracted
+
+// review: standalone
+func last() {}
+`)
+
+	// Use LoadAll (no local dir) to get the embedded tag set.
+	_, tagSet := extension.LoadAll("")
+
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, tagSet)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// critique, propose, and review should be extracted; todo should not.
+	if len(comments) != 3 {
+		t.Fatalf("expected 3 comments, got %d", len(comments))
+	}
+
+	tagsSeen := map[parser.Tag]bool{}
+	for _, c := range comments {
+		tagsSeen[c.Tag] = true
+	}
+
+	if !tagsSeen[parser.Tag("critique")] {
+		t.Error("expected critique tag extracted")
+	}
+	if !tagsSeen[parser.Tag("propose")] {
+		t.Error("expected propose tag extracted")
+	}
+	if !tagsSeen[parser.TagReview] {
+		t.Error("expected review tag extracted")
+	}
+
+	// Grouper should handle extension tags correctly.
+	groups := grouper.GroupComments(comments, fileContents, 2)
+
+	// Should have 1 named group "perf" and 1 unnamed.
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(groups))
+	}
+	if groups[0].Name != "perf" {
+		t.Errorf("expected first group 'perf', got %q", groups[0].Name)
+	}
+	if len(groups[0].Entries) != 2 {
+		t.Errorf("expected 2 entries in perf group, got %d", len(groups[0].Entries))
+	}
+}
+
+func TestE2ECustomExtensionWithLocalDir(t *testing.T) {
+	srcDir := t.TempDir()
+	localDir := t.TempDir()
+
+	// Create a custom extension.
+	extDir := filepath.Join(localDir, "extensions")
+	if err := os.MkdirAll(extDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(extDir, "custom.yaml"),
+		[]byte("tag: custom\nbehavior: do custom things\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	goFile := writeTestFile(t, srcDir, "code.go", `package main
+
+// custom(feat): do the custom thing
+func hello() {}
+
+// review: regular comment
+func other() {}
+`)
+
+	_, tagSet := extension.LoadAll(localDir)
+
+	// custom should be in the tag set.
+	if _, ok := tagSet["custom"]; !ok {
+		t.Fatal("expected custom in tag set")
+	}
+
+	comments, fileContents, _, _, err := processFiles([]string{goFile}, tagSet)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(comments) != 2 {
+		t.Fatalf("expected 2 comments, got %d", len(comments))
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 2)
+
+	// Should have named group "feat" from custom tag and unnamed from review.
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(groups))
+	}
+
+	// Verify custom tag flows through to group entry.
+	found := false
+	for _, g := range groups {
+		for _, e := range g.Entries {
+			if e.Tag == parser.Tag("custom") {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("expected custom tag in group entries")
+	}
+}
+
+func TestE2EExtractDoesNotDeleteNonExtensionTags(t *testing.T) {
+	dir := t.TempDir()
+
+	goFile := writeTestFile(t, dir, "code.go", "package main\n\n// note: keep this\n\n// review: delete this\nfunc hello() {}\n")
+
+	_, tagSet := extension.LoadAll("")
+
+	_, fileContents, fileRanges, filePerms, err := processFiles([]string{goFile}, tagSet)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := deleteFromFiles(fileContents, fileRanges, filePerms); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := os.ReadFile(goFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := string(result)
+	if !strings.Contains(got, "// note: keep this") {
+		t.Error("note comment was incorrectly deleted")
+	}
+	if strings.Contains(got, "// review: delete this") {
+		t.Error("review comment was not deleted")
 	}
 }

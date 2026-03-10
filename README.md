@@ -9,6 +9,7 @@ A code review tool for AI agents. Leave structured review comments in your sourc
 - [Installation](#installation)
 - [Commands](#commands)
 - [Tracking Files](#tracking-files)
+- [Extensions](#extensions)
 - [Supported Languages](#supported-languages)
 - [CLI Usage](#cli-usage)
 - [License](#license)
@@ -42,13 +43,23 @@ Add review comments using your language's comment syntax with a tag prefix:
 
 ### Tags
 
+These tags are built in. Run `aireview behavior` to see the full list with descriptions, or `aireview behavior <tag>` for details on a specific tag.
+
 | Tag | Purpose |
 |-----|---------|
-| `review` | Bug or issue — the agent should fix it |
-| `discuss` | Needs debate — the agent presents options, waits for your input |
-| `explain` | Wants reasoning — the agent explains the code's logic |
+| `review` | Bug or issue — the agent fixes it and proposes resolution |
+| `discuss` | Needs debate — the agent presents options, waits for agreement |
+| `explain` | Wants reasoning — the agent explains, may lead to discussion or change |
+| `impl` | Implementation request — the agent writes the code at the annotated location |
+| `refactor` | Refactoring — the agent restructures code, preserving behavior |
+| `critique` | Critical review — the agent challenges assumptions, finds edge cases |
+| `propose` | Request alternatives — the agent suggests options with tradeoffs |
+| `test` | Test request — the agent writes tests for the annotated code |
+| `doc` | Documentation — the agent writes or improves docs |
 | `see` | Cross-reference to a named group (no message) |
 | `also` | Cross-reference to a named group (no message) |
+
+You can override any built-in tag or add custom ones. See [Extensions](#extensions).
 
 ### Grouping
 
@@ -211,6 +222,53 @@ group: auth
 
 A validation hook runs automatically after edits to `.aireview/` files to catch formatting errors.
 
+## Extensions
+
+Tags are defined as YAML files. You can override built-in tags or create custom ones by adding `.yaml` files to your extension directories.
+
+### Lookup Order
+
+1. **Local** — `.aireview/extensions/<tag>.yaml` in your repo root
+2. **Global** — `$HOME/.config/aireview/extensions/<tag>.yaml`
+3. **Embedded** — built-in defaults bundled with the binary
+
+Local fully replaces global, global fully replaces embedded. No merging.
+
+### Extension Format
+
+```yaml
+tag: mytag
+behavior: |
+  Describe the agent's posture when handling this tag.
+  This text is shown to the agent to guide its behavior.
+```
+
+The `tag` field must match the filename (without `.yaml`). Tag names must be lowercase and match `[a-z][a-z0-9_-]*`.
+
+### Example: Custom Tag
+
+Create `.aireview/extensions/security.yaml` in your repo:
+
+```yaml
+tag: security
+behavior: |
+  Audit the annotated code for security vulnerabilities. Check for
+  injection, authentication bypass, data exposure, and OWASP top 10
+  issues. Flag findings with severity.
+```
+
+Now you can use `// security(auth): check for timing attacks` in your code.
+
+### Querying Behaviors
+
+```bash
+# List all known tags and their behaviors
+aireview behavior
+
+# Show behavior for a specific tag
+aireview behavior impl
+```
+
 ## Supported Languages
 
 aireview detects file languages automatically and understands their comment syntax. It supports 64 languages including:
@@ -221,7 +279,7 @@ Both line comments (`//`, `#`, `--`) and block comments (`/* */`, `{- -}`, `(* *
 
 ## CLI Usage
 
-The CLI can also be used standalone outside of Claude Code. It has three subcommands:
+The CLI can also be used standalone outside of Claude Code:
 
 ```bash
 # List comments (read-only)
@@ -234,6 +292,10 @@ aireview extract --dir .aireview --all
 
 # Delete comments from source code
 aireview delete --all
+
+# Query tag behaviors
+aireview behavior          # list all tags
+aireview behavior review   # show behavior for a specific tag
 ```
 
 ### Scope Flags

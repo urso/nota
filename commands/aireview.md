@@ -6,80 +6,64 @@ argument-hint: [optional directive e.g. "focus on auth group"]
 
 # aireview — Code Review Workflow
 
-You are responding to code review comments left by the developer. The developer is the reviewer — you are the respondent. This follows a PR review workflow: the developer leaves feedback in code, you read it, and address each item.
+The developer is the reviewer. Respond to their code review comments following a PR review cycle: read feedback, address each item, get confirmation before resolving.
 
 ## Step 1: Extract new comments
-
-Run the aireview CLI to extract any new review comments from code into tracking files:
 
 ```
 !`bash ${CLAUDE_PLUGIN_ROOT}/scripts/aireview.sh extract --all 2>&1`
 ```
 
-If the tool reports no comments found, skip to Step 2.
+If no comments found, skip to Step 2.
 
 ## Step 2: Read open reviews
-
-List open tracking files:
 
 ```
 !`bash ${CLAUDE_PLUGIN_ROOT}/scripts/list-open.sh`
 ```
 
-If no files are listed, tell the user there are no open reviews to address and stop.
+If no files listed, report no open reviews and stop.
 
-For each listed file, read its open sections using the read-open script:
+For each listed file, read open sections:
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/read-open.sh <file>
 ```
 
-Run this for every file from the list above. This filters out already-resolved sections so you only see what still needs attention.
+## Step 3: Load tag behaviors and triage
 
-## Step 3: Triage and plan
+```
+!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/aireview.sh behavior 2>&1`
+```
 
-Classify each open review item:
-
-| Tag | Your behavior |
-|-----|--------------|
-| `review` | This is a bug or issue to fix. Make the code change. |
-| `discuss` | The reviewer wants to debate this. Present your perspective, propose options. Do NOT change code until the developer agrees. |
-| `explain` | The reviewer wants to understand the reasoning. Explain clearly. This may turn into a discussion or code change. |
-
-Present a summary to the user:
-- How many items total, broken down by tag type
-- Group by theme/file if there are many
-- Suggest an order to tackle them
-- Ask the user whether to address everything or focus on specific items
-
-If the user provided a directive (e.g. "focus on auth group", "just the quick fixes"), follow it.
+Follow the behavior description for each tag when addressing items. Present a summary:
+- Item count by tag type, grouped by theme/file
+- Suggested order
+- Ask whether to address all or focus on specific items
 
 $ARGUMENTS
 
 ## Step 4: Address each item
 
-Work through the items. For each one:
+For each item:
+1. Read the relevant source code
+2. Follow the tag's behavior — fix, discuss, explain, implement, etc.
+3. For tags requiring agreement, do NOT change code until the developer confirms
 
-1. **Read the relevant source code** around the location mentioned in the review
-2. **For `review` items**: Fix the issue. Show what you changed.
-3. **For `discuss` items**: Present your analysis and options. Wait for the developer's input before making changes.
-4. **For `explain` items**: Provide a clear explanation. Ask if the developer is satisfied or wants changes.
+### Convergence loop
+
+When making code changes (e.g. `impl`, `refactor`) and uncertain about the right approach, prefer leaving a new annotation over guessing. This enables iterative `/aireview` passes until all annotations converge.
+
+To leave an annotation:
+- Use the line comment syntax of the file's language (`//` for Go/C/Rust, `#` for Python/Ruby/Shell, etc.)
+- Use `discuss(name):` for questions/clarifications or `propose(name):` for suggesting alternatives
+- Reuse the same group name as the original annotation to keep the conversation linked
 
 ## Step 5: Resolution
 
-After addressing an item and getting user confirmation:
+After user confirmation on an item:
+1. Prepend `[resolved]` or `[wontfix]` to the section heading in the tracking file
+2. Add a brief response (e.g. `> Fixed: changed <= to < in validateToken()`)
+3. When all sections in a file are resolved, set frontmatter `status: resolved`
 
-1. Edit the tracking file in `.aireview/`
-2. Prepend `[resolved]` or `[wontfix]` to the section heading
-3. Add a brief response comment below the heading (e.g. `> Fixed: changed <= to < in validateToken()`)
-4. When ALL sections in a file are resolved, update the frontmatter `status: resolved`
-
-**IMPORTANT: Never mark an item resolved without user confirmation.** Always ask: "Want me to mark this resolved?" or wait for the user to say it's good.
-
-## Rules
-
-- You are the respondent, not the reviewer. Respect the developer's feedback.
-- You can push back if you think the reviewer is wrong, but explain why.
-- For `discuss` items, never change code without agreement.
-- If a review comment references code that has changed significantly, note this to the user.
-- Work incrementally — don't try to resolve everything in one message unless the user asks for it.
+Never mark an item resolved without user confirmation.

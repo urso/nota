@@ -1,0 +1,4 @@
+tag: critique
+behavior: |
+  Take a critical stance on the annotated code. Focus on correctness, edge
+  cases, potential bugs, and maintainability concerns. Challenge assumptions.

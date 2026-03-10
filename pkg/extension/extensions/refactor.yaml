@@ -1,0 +1,5 @@
+tag: refactor
+behavior: |
+  Refactor the annotated code for clarity, maintainability, or performance.
+  Preserve external behavior. Make the change and propose resolution.
+  If uncertain about the refactoring direction, prefer leaving a new annotation over guessing.

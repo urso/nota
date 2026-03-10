@@ -247,6 +247,95 @@ func TestTagScanner(t *testing.T) {
 	}
 }
 
+func TestTagScannerWithKnownTags(t *testing.T) {
+	knownTags := map[string]struct{}{
+		"review":  {},
+		"discuss": {},
+		"explain": {},
+		"critique": {},
+		"see":     {},
+		"also":    {},
+	}
+
+	tests := []struct {
+		name     string
+		comments []*scanner.Comment
+		expected []ReviewComment
+	}{
+		{
+			name:     "extension tag critique accepted",
+			comments: []*scanner.Comment{lineComment("// critique(perf): check allocation", 1, 0, 35)},
+			expected: []ReviewComment{
+				{Tag: "critique", Name: "perf", Message: "check allocation", File: "test.go", Line: 1, EndLine: 1, StartByte: 0, EndByte: 35},
+			},
+		},
+		{
+			name:     "unknown tag todo silently skipped",
+			comments: []*scanner.Comment{lineComment("// todo: fix this later", 1, 0, 23)},
+			expected: nil,
+		},
+		{
+			name:     "unknown tag note silently skipped",
+			comments: []*scanner.Comment{lineComment("// note: important thing", 1, 0, 24)},
+			expected: nil,
+		},
+		{
+			name:     "unknown tag fixme silently skipped",
+			comments: []*scanner.Comment{lineComment("// fixme: broken thing", 1, 0, 22)},
+			expected: nil,
+		},
+		{
+			name:     "hyphenated tag name matched",
+			comments: []*scanner.Comment{lineComment("// my-tag: something", 1, 0, 20)},
+			expected: nil, // my-tag not in knownTags
+		},
+		{
+			name:     "underscore tag name matched",
+			comments: []*scanner.Comment{lineComment("// my_tag: something", 1, 0, 20)},
+			expected: nil, // my_tag not in knownTags
+		},
+		{
+			name:     "numeric start not matched",
+			comments: []*scanner.Comment{lineComment("// 123invalid: something", 1, 0, 24)},
+			expected: nil,
+		},
+		{
+			name:     "pattern B see still works with knownTags",
+			comments: []*scanner.Comment{lineComment("// see: auth", 1, 0, 12)},
+			expected: []ReviewComment{
+				{Tag: TagSee, Name: "auth", Message: "", File: "test.go", Line: 1, EndLine: 1, StartByte: 0, EndByte: 12},
+			},
+		},
+		{
+			name:     "pattern B priority - see: auth is cross-reference not generic tag",
+			comments: []*scanner.Comment{lineComment("// see: auth", 1, 0, 12)},
+			expected: []ReviewComment{
+				{Tag: TagSee, Name: "auth", Message: "", File: "test.go", Line: 1, EndLine: 1, StartByte: 0, EndByte: 12},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := newMock(tt.comments...)
+			ts := NewTagScannerWithTags(mock, "test.go", knownTags)
+
+			var got []ReviewComment
+			for ts.Scan() {
+				got = append(got, *ts.Next())
+			}
+
+			if err := ts.Err(); err != nil {
+				t.Fatalf("tag scanner error: %v", err)
+			}
+
+			if diff := cmp.Diff(tt.expected, got); diff != "" {
+				t.Errorf("review comments mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func containsStr(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
 }

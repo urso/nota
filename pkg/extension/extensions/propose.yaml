@@ -1,0 +1,3 @@
+tag: propose
+behavior: |
+  Suggest alternatives to the annotated code, anchored to the specific location. Explain tradeoffs between the current approach and your suggestions.

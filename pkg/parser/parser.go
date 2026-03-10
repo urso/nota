@@ -42,8 +42,8 @@ type CommentScanner interface {
 }
 
 var (
-	// patternA matches review(name): message or review: message
-	patternA = regexp.MustCompile(`(?:^|\s)(review|discuss|explain)(?:\(([^)]*)\))?\s*:\s*(.*)`)
+	// patternA matches tag(name): message or tag: message for any lowercase tag name.
+	patternA = regexp.MustCompile(`(?:^|\s)([a-z][a-z0-9_-]*)(?:\(([^)]*)\))?\s*:\s*(.*)`)
 
 	// patternB matches see: name or also: name
 	patternB = regexp.MustCompile(`(?:^|\s)(see|also)\s*:\s*(\S+)(.*)`)
@@ -51,17 +51,39 @@ var (
 
 // TagScanner wraps a CommentScanner and extracts review tags.
 type TagScanner struct {
-	scanner  CommentScanner
-	filePath string
-	next     *ReviewComment
-	err      error
+	scanner   CommentScanner
+	filePath  string
+	knownTags map[string]struct{}
+	next      *ReviewComment
+	err       error
 }
 
-// NewTagScanner creates a new TagScanner.
+// legacyTags is the default known-tag set for backward compatibility.
+// When no explicit knownTags are provided, only these tags are accepted.
+var legacyTags = map[string]struct{}{
+	"review":  {},
+	"discuss": {},
+	"explain": {},
+	"see":     {},
+	"also":    {},
+}
+
+// NewTagScanner creates a new TagScanner that accepts the legacy tag set
+// (review, discuss, explain, see, also) for backward compatibility.
 func NewTagScanner(s CommentScanner, filePath string) *TagScanner {
 	return &TagScanner{
-		scanner:  s,
-		filePath: filePath,
+		scanner:   s,
+		filePath:  filePath,
+		knownTags: legacyTags,
+	}
+}
+
+// NewTagScannerWithTags creates a new TagScanner that only accepts tags in the known set.
+func NewTagScannerWithTags(s CommentScanner, filePath string, knownTags map[string]struct{}) *TagScanner {
+	return &TagScanner{
+		scanner:   s,
+		filePath:  filePath,
+		knownTags: knownTags,
 	}
 }
 
@@ -138,31 +160,7 @@ func (t *TagScanner) parseComment(c *scanner.Comment) *ReviewComment {
 		endLine = c.Line + strings.Count(c.Text, "\n")
 	}
 
-	// Try pattern A (review/discuss/explain).
-	if m := patternA.FindStringSubmatch(innerText); m != nil {
-		tag := Tag(m[1])
-		name := m[2]
-		message := strings.TrimSpace(m[3])
-
-		// For multiline block comments, append continuation lines.
-		if c.Multiline && len(continuationLines) > 0 {
-			message = appendContinuation(message, continuationLines)
-		}
-
-		return &ReviewComment{
-			Tag:       tag,
-			Name:      name,
-			Message:   message,
-			File:      t.filePath,
-			Line:      c.Line,
-			EndLine:   endLine,
-			StartByte: c.StartByte,
-			EndByte:   c.EndByte,
-			Multiline: c.Multiline,
-		}
-	}
-
-	// Try pattern B (see/also).
+	// Try pattern B (see/also) first to prevent generic pattern A from capturing them.
 	if m := patternB.FindStringSubmatch(innerText); m != nil {
 		tag := Tag(m[1])
 		name := m[2]
@@ -177,6 +175,43 @@ func (t *TagScanner) parseComment(c *scanner.Comment) *ReviewComment {
 			Tag:       tag,
 			Name:      name,
 			Message:   "",
+			File:      t.filePath,
+			Line:      c.Line,
+			EndLine:   endLine,
+			StartByte: c.StartByte,
+			EndByte:   c.EndByte,
+			Multiline: c.Multiline,
+		}
+	}
+
+	// Try pattern A (generic tag).
+	if m := patternA.FindStringSubmatch(innerText); m != nil {
+		tag := Tag(m[1])
+
+		// see/also are reserved for pattern B (cross-references only).
+		if tag == TagSee || tag == TagAlso {
+			return nil
+		}
+
+		// If knownTags is set, silently skip tags not in the set.
+		if t.knownTags != nil {
+			if _, ok := t.knownTags[string(tag)]; !ok {
+				return nil
+			}
+		}
+
+		name := m[2]
+		message := strings.TrimSpace(m[3])
+
+		// For multiline block comments, append continuation lines.
+		if c.Multiline && len(continuationLines) > 0 {
+			message = appendContinuation(message, continuationLines)
+		}
+
+		return &ReviewComment{
+			Tag:       tag,
+			Name:      name,
+			Message:   message,
 			File:      t.filePath,
 			Line:      c.Line,
 			EndLine:   endLine,

@@ -51,8 +51,7 @@ func GroupComments(comments []parser.ReviewComment, files map[string][]byte, con
 	for _, c := range comments {
 		ctx := extractContext(files[c.File], c.Line, c.EndLine, contextLines)
 
-		switch c.Tag {
-		case parser.TagSee, parser.TagAlso:
+		if c.Tag == parser.TagSee || c.Tag == parser.TagAlso {
 			refs = append(refs, pendingRef{
 				name: c.Name,
 				ref: Reference{
@@ -62,8 +61,7 @@ func GroupComments(comments []parser.ReviewComment, files map[string][]byte, con
 				},
 				c: c,
 			})
-
-		case parser.TagReview, parser.TagDiscuss, parser.TagExplain:
+		} else {
 			entry := Entry{
 				Tag:     c.Tag,
 				File:    c.File,
