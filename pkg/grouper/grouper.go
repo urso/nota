@@ -5,7 +5,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/urso/aireview/pkg/parser"
+	"github.com/urso/nota/pkg/parser"
 )
 
 // Entry is a review comment with its surrounding context.

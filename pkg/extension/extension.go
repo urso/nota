@@ -44,7 +44,7 @@ func LoadAll(localDir string) (map[string]Extension, TagSet) {
 
 	// 2. Load global overrides from UserConfigDir.
 	if globalDir, err := os.UserConfigDir(); err == nil {
-		globalExtDir := filepath.Join(globalDir, "aireview", "extensions")
+		globalExtDir := filepath.Join(globalDir, "nota", "extensions")
 		loadDir(globalExtDir, exts)
 	}
 
@@ -87,7 +87,7 @@ func LoadExtension(tag string, localDir string) *Extension {
 
 	// Try global.
 	if globalDir, err := os.UserConfigDir(); err == nil {
-		if ext := loadFile(filepath.Join(globalDir, "aireview", "extensions", tag+".yaml")); ext != nil {
+		if ext := loadFile(filepath.Join(globalDir, "nota", "extensions", tag+".yaml")); ext != nil {
 			return ext
 		}
 	}

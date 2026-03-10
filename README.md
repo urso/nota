@@ -1,6 +1,6 @@
-# aireview
+# nota
 
-A code review tool for AI agents. Leave structured review comments in your source code, and let your AI agent extract, track, and address them.
+A code review annotation tool for use with AI agents. Leave structured review comments in your source code, and let your AI agent extract, track, and address them.
 
 ## Table of Contents
 
@@ -17,14 +17,14 @@ A code review tool for AI agents. Leave structured review comments in your sourc
 ## How It Works
 
 1. You leave review comments directly in your source code
-2. Run `/aireview` — comments are extracted into tracking files (`.aireview/`) and removed from source code
+2. Run `/nota` — comments are extracted into tracking files (`.nota/`) and removed from source code
 3. The agent reads each item and addresses it — fixing bugs, explaining decisions, or discussing tradeoffs
 4. Resolved items are marked in the tracking file
 5. Once done, clean up the tracking files
 
 ```mermaid
 flowchart LR
-    A["Write comments\nin code"] --> B["Run /aireview"]
+    A["Write comments\nin code"] --> B["Run /nota"]
     B --> C["Extract to tracking\n& remove from code"]
     C --> D["Agent addresses\neach item"]
     D --> E["Mark resolved\n& clean up"]
@@ -43,7 +43,7 @@ Add review comments using your language's comment syntax with a tag prefix:
 
 ### Tags
 
-These tags are built in. Run `aireview behavior` to see the full list with descriptions, or `aireview behavior <tag>` for details on a specific tag.
+These tags are built in. Run `nota behavior` to see the full list with descriptions, or `nota behavior <tag>` for details on a specific tag.
 
 | Tag | Purpose |
 |-----|---------|
@@ -127,8 +127,8 @@ HTML/Markdown:
 Add the marketplace and install the plugin in Claude Code:
 
 ```text
-/plugin marketplace add urso/aireview
-/plugin install aireview@urso/aireview
+/plugin marketplace add urso/nota
+/plugin install nota@urso/nota
 ```
 
 ### From Source
@@ -136,14 +136,14 @@ Add the marketplace and install the plugin in Claude Code:
 If you clone the repository, load the plugin directly:
 
 ```bash
-claude --plugin-dir /path/to/aireview
+claude --plugin-dir /path/to/nota
 ```
 
 Or add it as a local marketplace for permanent installation:
 
 ```text
-/plugin marketplace add /path/to/aireview
-/plugin install aireview@aireview-plugins
+/plugin marketplace add /path/to/nota
+/plugin install nota@nota-plugins
 ```
 
 ### CLI (Optional)
@@ -151,50 +151,50 @@ Or add it as a local marketplace for permanent installation:
 The CLI can be used standalone outside of Claude Code. Requires Go:
 
 ```bash
-go install github.com/urso/aireview/cmd/aireview@latest
+go install github.com/urso/nota/cmd/nota@latest
 ```
 
-Run `aireview --help` for usage.
+Run `nota --help` for usage.
 
 ## Commands
 
 All commands are available as slash commands in Claude Code after installing the plugin.
 
-### `/aireview`
+### `/nota`
 
 The main workflow. Extracts new comments from code, reads open reviews, and addresses each item. The agent triages by tag type — fixing `review` items, discussing `discuss` items, and explaining `explain` items. Pass an optional directive to focus on specific groups or items.
 
 ```text
-/aireview focus on auth group
+/nota focus on auth group
 ```
 
-### `/aireview-list`
+### `/nota-list`
 
 Peek at review comments in code without extracting. Read-only.
 
 ```text
-/aireview-list --staged
+/nota-list --staged
 ```
 
-### `/aireview-delete`
+### `/nota-delete`
 
 Delete all review comments from source code permanently without saving them. Asks for confirmation first.
 
-### `/aireview-evaluate`
+### `/nota-evaluate`
 
 Get a second opinion on your review comments. The agent critically evaluates each item and tells you if it's valid, questionable, a false positive, or a nitpick. No code changes are made.
 
-### `/aireview-status`
+### `/nota-status`
 
 Overview of all tracking files — open, resolved, and wontfix counts per file.
 
-### `/aireview-cleanup`
+### `/nota-cleanup`
 
 Remove tracking files that have `status: resolved`. Asks for confirmation.
 
 ## Tracking Files
 
-Extracted comments are saved to `.aireview/` in your repo root as markdown files with YAML frontmatter:
+Extracted comments are saved to `.nota/` in your repo root as markdown files with YAML frontmatter:
 
 ```markdown
 ---
@@ -220,7 +220,7 @@ group: auth
 - Sections are marked `[resolved]` or `[wontfix]` when addressed
 - File status changes to `resolved` when all sections are complete
 
-A validation hook runs automatically after edits to `.aireview/` files to catch formatting errors.
+A validation hook runs automatically after edits to `.nota/` files to catch formatting errors.
 
 ## Extensions
 
@@ -228,8 +228,8 @@ Tags are defined as YAML files. You can override built-in tags or create custom 
 
 ### Lookup Order
 
-1. **Local** — `.aireview/extensions/<tag>.yaml` in your repo root
-2. **Global** — `$HOME/.config/aireview/extensions/<tag>.yaml`
+1. **Local** — `.nota/extensions/<tag>.yaml` in your repo root
+2. **Global** — `$HOME/.config/nota/extensions/<tag>.yaml`
 3. **Embedded** — built-in defaults bundled with the binary
 
 Local fully replaces global, global fully replaces embedded. No merging.
@@ -247,7 +247,7 @@ The `tag` field must match the filename (without `.yaml`). Tag names must be low
 
 ### Example: Custom Tag
 
-Create `.aireview/extensions/security.yaml` in your repo:
+Create `.nota/extensions/security.yaml` in your repo:
 
 ```yaml
 tag: security
@@ -263,15 +263,15 @@ Now you can use `// security(auth): check for timing attacks` in your code.
 
 ```bash
 # List all known tags and their behaviors
-aireview behavior
+nota behavior
 
 # Show behavior for a specific tag
-aireview behavior impl
+nota behavior impl
 ```
 
 ## Supported Languages
 
-aireview detects file languages automatically and understands their comment syntax. It supports 64 languages including:
+nota detects file languages automatically and understands their comment syntax. It supports 64 languages including:
 
 Go, Python, JavaScript, TypeScript, Java, C, C++, C#, Rust, Ruby, PHP, Shell, SQL, Swift, Kotlin, Scala, Lua, Perl, Haskell, Elixir, Erlang, Clojure, Dart, OCaml, R, Julia, Vim Script, and more.
 
@@ -283,19 +283,19 @@ The CLI can also be used standalone outside of Claude Code:
 
 ```bash
 # List comments (read-only)
-aireview list --all
-aireview list --staged
-aireview list path/to/file.go
+nota list --all
+nota list --staged
+nota list path/to/file.go
 
 # Extract comments to tracking files
-aireview extract --dir .aireview --all
+nota extract --dir .nota --all
 
 # Delete comments from source code
-aireview delete --all
+nota delete --all
 
 # Query tag behaviors
-aireview behavior          # list all tags
-aireview behavior review   # show behavior for a specific tag
+nota behavior          # list all tags
+nota behavior review   # show behavior for a specific tag
 ```
 
 ### Scope Flags
@@ -310,7 +310,7 @@ aireview behavior review   # show behavior for a specific tag
 ### Format Options
 
 ```bash
-aireview list --format markdown   # default
-aireview list --format yaml
-aireview list --context 5         # lines of context (default: 3)
+nota list --format markdown   # default
+nota list --format yaml
+nota list --context 5         # lines of context (default: 3)
 ```

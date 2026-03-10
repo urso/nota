@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/urso/aireview/pkg/deleter"
-	"github.com/urso/aireview/pkg/extension"
-	"github.com/urso/aireview/pkg/formatter"
-	"github.com/urso/aireview/pkg/grouper"
-	"github.com/urso/aireview/pkg/parser"
+	"github.com/urso/nota/pkg/deleter"
+	"github.com/urso/nota/pkg/extension"
+	"github.com/urso/nota/pkg/formatter"
+	"github.com/urso/nota/pkg/grouper"
+	"github.com/urso/nota/pkg/parser"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1191,7 +1191,7 @@ func TestWriteOutput(t *testing.T) {
 
 func TestExtractDirNamedGroup(t *testing.T) {
 	srcDir := t.TempDir()
-	outDir := filepath.Join(t.TempDir(), ".aireview")
+	outDir := filepath.Join(t.TempDir(), ".nota")
 
 	goFile := writeTestFile(t, srcDir, "auth.go", `package auth
 
@@ -1247,7 +1247,7 @@ func other() {}
 
 func TestExtractDirUnnamedGroups(t *testing.T) {
 	srcDir := t.TempDir()
-	outDir := filepath.Join(t.TempDir(), ".aireview")
+	outDir := filepath.Join(t.TempDir(), ".nota")
 
 	goFile := writeTestFile(t, srcDir, "code.go", `package main
 
@@ -1420,7 +1420,7 @@ func hello() {}
 
 func TestExtractDirMixedNamedAndUnnamed(t *testing.T) {
 	srcDir := t.TempDir()
-	outDir := filepath.Join(t.TempDir(), ".aireview")
+	outDir := filepath.Join(t.TempDir(), ".nota")
 
 	goFile := writeTestFile(t, srcDir, "code.go", `package main
 
@@ -1455,7 +1455,7 @@ func other() {}
 
 func TestExtractDirWithDelete(t *testing.T) {
 	srcDir := t.TempDir()
-	outDir := filepath.Join(t.TempDir(), ".aireview")
+	outDir := filepath.Join(t.TempDir(), ".nota")
 
 	goFile := writeTestFile(t, srcDir, "code.go", `package main
 
@@ -1568,7 +1568,7 @@ func TestReopenIfResolvedOnlyChangesFrontmatter(t *testing.T) {
 
 func TestExtractDirNoComments(t *testing.T) {
 	srcDir := t.TempDir()
-	outDir := filepath.Join(t.TempDir(), ".aireview")
+	outDir := filepath.Join(t.TempDir(), ".nota")
 
 	goFile := writeTestFile(t, srcDir, "clean.go", `package main
 

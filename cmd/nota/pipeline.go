@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/urso/aireview/pkg/deleter"
-	"github.com/urso/aireview/pkg/parser"
-	"github.com/urso/aireview/pkg/scanner"
+	"github.com/urso/nota/pkg/deleter"
+	"github.com/urso/nota/pkg/parser"
+	"github.com/urso/nota/pkg/scanner"
 )
 
 // processFiles runs scan → parse for each file, returns comments, file contents, and byte ranges.

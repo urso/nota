@@ -4,14 +4,14 @@ allowed-tools: Bash, Read, Edit, Write, Glob, Grep
 argument-hint: [optional directive e.g. "focus on auth group"]
 ---
 
-# aireview — Code Review Workflow
+# nota — Code Review Workflow
 
 The developer is the reviewer. Respond to their code review comments following a PR review cycle: read feedback, address each item, get confirmation before resolving.
 
 ## Step 1: Extract new comments
 
 ```
-!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/aireview.sh extract --all 2>&1`
+!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh extract --all 2>&1`
 ```
 
 If no comments found, skip to Step 2.
@@ -33,7 +33,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/read-open.sh <file>
 ## Step 3: Load tag behaviors and triage
 
 ```
-!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/aireview.sh behavior 2>&1`
+!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh behavior 2>&1`
 ```
 
 Follow the behavior description for each tag when addressing items. Present a summary:
@@ -52,7 +52,7 @@ For each item:
 
 ### Convergence loop
 
-When making code changes (e.g. `impl`, `refactor`) and uncertain about the right approach, prefer leaving a new annotation over guessing. This enables iterative `/aireview` passes until all annotations converge.
+When making code changes (e.g. `impl`, `refactor`) and uncertain about the right approach, prefer leaving a new annotation over guessing. This enables iterative `/nota` passes until all annotations converge.
 
 To leave an annotation:
 - Use the line comment syntax of the file's language (`//` for Go/C/Rust, `#` for Python/Ruby/Shell, etc.)

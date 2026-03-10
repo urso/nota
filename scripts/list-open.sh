@@ -1,6 +1,6 @@
 #!/bin/bash
-# Lists .aireview/*.md files that have status: open in frontmatter.
-# Resolves .aireview/ from the git repo root and outputs absolute paths.
+# Lists .nota/*.md files that have status: open in frontmatter.
+# Resolves .nota/ from the git repo root and outputs absolute paths.
 # Exits 0 even if none found.
 
 root=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -9,7 +9,7 @@ if [ -z "$root" ]; then
   exit 1
 fi
 
-dir="$root/.aireview"
+dir="$root/.nota"
 
 if [ ! -d "$dir" ]; then
   exit 0

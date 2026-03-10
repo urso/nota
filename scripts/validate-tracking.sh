@@ -1,5 +1,5 @@
 #!/bin/bash
-# PostToolUse hook: validates .aireview/ tracking files after Edit.
+# PostToolUse hook: validates .nota/ tracking files after Edit.
 # Receives hook input as JSON on stdin.
 # Exits 0 if valid or not applicable, non-zero with error message if invalid.
 
@@ -10,9 +10,9 @@ if [ -z "$file" ] || [ ! -f "$file" ]; then
   exit 0
 fi
 
-# Only validate files in .aireview/
+# Only validate files in .nota/
 case "$file" in
-  .aireview/*|*/.aireview/*) ;;
+  .nota/*|*/.nota/*) ;;
   *) exit 0 ;;
 esac
 

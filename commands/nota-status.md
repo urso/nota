@@ -3,10 +3,10 @@ description: Overview of open and resolved reviews
 allowed-tools: Bash, Read
 ---
 
-# aireview-status — Review Status Overview
+# nota-status — Review Status Overview
 
 ```
-!`ls "$(git rev-parse --show-toplevel)/.aireview"/*.md 2>/dev/null || echo "NO_TRACKING_FILES"`
+!`ls "$(git rev-parse --show-toplevel)/.nota"/*.md 2>/dev/null || echo "NO_TRACKING_FILES"`
 ```
 
 If no tracking files exist, report no reviews and stop.

@@ -59,7 +59,7 @@ func DeleteComments(fileContent []byte, ranges []ByteRange) ([]byte, error) {
 func WriteAtomic(filePath string, content []byte, perm os.FileMode) error {
 	dir := filepath.Dir(filePath)
 
-	tmp, err := os.CreateTemp(dir, ".aireview-tmp-*")
+	tmp, err := os.CreateTemp(dir, ".nota-tmp-*")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}

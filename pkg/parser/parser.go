@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/urso/aireview/pkg/scanner"
+	"github.com/urso/nota/pkg/scanner"
 )
 
 // Tag represents the type of review comment.

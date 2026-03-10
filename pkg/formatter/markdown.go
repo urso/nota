@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/urso/aireview/pkg/grouper"
+	"github.com/urso/nota/pkg/grouper"
 )
 
 // extensionToLang maps file extensions to markdown code fence language tags.

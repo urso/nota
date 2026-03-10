@@ -1,4 +1,4 @@
-module github.com/urso/aireview
+module github.com/urso/nota
 
 go 1.26
 

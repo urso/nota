@@ -1,12 +1,12 @@
 ---
 name: Review Context
-description: "This skill should be used when the user asks to 'show open reviews', 'continue the review', 'resume review work', 'what reviews are pending', or after context compaction or session handover. Loads existing review state from .aireview/ tracking files — does not extract new comments from source code."
+description: "This skill should be used when the user asks to 'show open reviews', 'continue the review', 'resume review work', 'what reviews are pending', or after context compaction or session handover. Loads existing review state from .nota/ tracking files — does not extract new comments from source code."
 version: 1.0.0
 ---
 
 # Review Context — Loading Open Reviews
 
-Load the current state of code reviews from `.aireview/` tracking files. Useful after context compaction, handover, or when context about ongoing reviews has been lost.
+Load the current state of code reviews from `.nota/` tracking files. Useful after context compaction, handover, or when context about ongoing reviews has been lost.
 
 ## Step 1: List open tracking files
 
@@ -28,7 +28,7 @@ This filters out `[resolved]` and `[wontfix]` sections.
 
 ## Tracking file format
 
-Each `.aireview/*.md` file:
+Each `.nota/*.md` file:
 
 ```markdown
 ---
@@ -42,7 +42,7 @@ status: open
 Review comment body...
 ```
 
-- **tag** identifies intent (e.g. `review`, `discuss`, `explain`, `impl`, `critique`, or custom tags). Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/aireview.sh behavior` for all known tags and behaviors.
+- **tag** identifies intent (e.g. `review`, `discuss`, `explain`, `impl`, `critique`, or custom tags). Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh behavior` for all known tags and behaviors.
 - Resolved sections have `[resolved]` or `[wontfix]` prepended to the heading
 - A resolution note appears below resolved headings as a blockquote
 

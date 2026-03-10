@@ -1,7 +1,7 @@
 #!/bin/bash
-# Wrapper for the aireview tool.
+# Wrapper for the nota tool.
 # Resolves repo root for --dir flag and ensures correct paths.
-# Usage: aireview.sh <subcommand> [flags] [files...]
+# Usage: nota.sh <subcommand> [flags] [files...]
 
 set -euo pipefail
 
@@ -9,7 +9,7 @@ set -euo pipefail
 CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 if ! command -v go &>/dev/null; then
-  echo "error: Go is not installed. aireview plugin requires Go." >&2
+  echo "error: Go is not installed. nota plugin requires Go." >&2
   exit 1
 fi
 
@@ -24,12 +24,12 @@ shift
 
 # Build the binary in the plugin root, then run it from the current directory
 # so that git-based file resolution works correctly.
-bin="${CLAUDE_PLUGIN_ROOT}/.bin/aireview"
+bin="${CLAUDE_PLUGIN_ROOT}/.bin/nota"
 newest_src=$(find "$CLAUDE_PLUGIN_ROOT" -name '*.go' -newer "$bin" -print -quit 2>/dev/null)
 if [ ! -f "$bin" ] || [ -n "$newest_src" ] || [ "$CLAUDE_PLUGIN_ROOT/go.mod" -nt "$bin" ]; then
   mkdir -p "${CLAUDE_PLUGIN_ROOT}/.bin"
   tmp=$(mktemp "${bin}.XXXXXX")
-  if go build -C "$CLAUDE_PLUGIN_ROOT" -o "$tmp" ./cmd/aireview/; then
+  if go build -C "$CLAUDE_PLUGIN_ROOT" -o "$tmp" ./cmd/nota/; then
     mv "$tmp" "$bin"
   else
     rm -f "$tmp"
@@ -39,7 +39,7 @@ fi
 
 case "$subcommand" in
   extract)
-    exec "$bin" extract --dir "$root/.aireview" "$@"
+    exec "$bin" extract --dir "$root/.nota" "$@"
     ;;
   list|delete)
     exec "$bin" "$subcommand" "$@"

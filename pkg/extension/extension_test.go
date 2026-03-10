@@ -59,7 +59,7 @@ func TestLoadAllGlobalOverridesEmbedded(t *testing.T) {
 	globalDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", globalDir)
 
-	extDir := filepath.Join(globalDir, "aireview", "extensions")
+	extDir := filepath.Join(globalDir, "nota", "extensions")
 	writeExtFile(t, extDir, "review.yaml", "tag: review\nbehavior: custom global behavior\n")
 
 	// Note: os.UserConfigDir on macOS uses ~/Library/Application Support, not XDG.

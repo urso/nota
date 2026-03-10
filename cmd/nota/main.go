@@ -12,11 +12,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/urso/aireview/pkg/deleter"
-	"github.com/urso/aireview/pkg/extension"
-	"github.com/urso/aireview/pkg/formatter"
-	"github.com/urso/aireview/pkg/git"
-	"github.com/urso/aireview/pkg/grouper"
+	"github.com/urso/nota/pkg/deleter"
+	"github.com/urso/nota/pkg/extension"
+	"github.com/urso/nota/pkg/formatter"
+	"github.com/urso/nota/pkg/git"
+	"github.com/urso/nota/pkg/grouper"
 )
 
 func main() {
@@ -46,7 +46,7 @@ func run(args []string) error {
 		if strings.HasPrefix(args[1], "-") || looksLikeFilePath(args[1]) {
 			return runList(args[1:])
 		}
-		return fmt.Errorf("unknown subcommand: %s\nUsage: aireview [list|delete|extract|behavior] [flags] [files...]", args[1])
+		return fmt.Errorf("unknown subcommand: %s\nUsage: nota [list|delete|extract|behavior] [flags] [files...]", args[1])
 	}
 }
 
@@ -71,7 +71,7 @@ func resolveFiles(fs *flag.FlagSet, modified, unstaged, staged, all *bool) ([]st
 	}
 
 	if !git.IsAvailable() {
-		return nil, fmt.Errorf("not in a git repository. Use explicit file paths: aireview [command] file1.go file2.go")
+		return nil, fmt.Errorf("not in a git repository. Use explicit file paths: nota [command] file1.go file2.go")
 	}
 
 	count := 0
@@ -105,7 +105,7 @@ func resolveFiles(fs *flag.FlagSet, modified, unstaged, staged, all *bool) ([]st
 
 	root, err := git.RepoRoot("")
 	if err != nil {
-		return nil, fmt.Errorf("not in a git repository. Use explicit file paths: aireview [command] file1.go file2.go")
+		return nil, fmt.Errorf("not in a git repository. Use explicit file paths: nota [command] file1.go file2.go")
 	}
 
 	gitFiles, err := git.ListFiles(scope, "")
@@ -197,7 +197,7 @@ func runDelete(args []string) error {
 func runExtract(args []string) error {
 	fs := flag.NewFlagSet("extract", flag.ExitOnError)
 	format, ctx, modified, unstaged, staged, all := addSharedFlags(fs)
-	dir := fs.String("dir", "", "Write tracking files to directory (e.g. .aireview/)")
+	dir := fs.String("dir", "", "Write tracking files to directory (e.g. .nota/)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func runExtract(args []string) error {
 		if *format == "yaml" {
 			ext = "yaml"
 		}
-		backup, err := os.CreateTemp("", fmt.Sprintf("aireview-backup-*.%s", ext))
+		backup, err := os.CreateTemp("", fmt.Sprintf("nota-backup-*.%s", ext))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not create backup file: %v\n", err)
 		} else {
@@ -417,18 +417,18 @@ func repoRoot() string {
 	return root
 }
 
-// localExtDir returns the .aireview directory path based on repo root.
+// localExtDir returns the .nota directory path based on repo root.
 func localExtDir() string {
 	if root := repoRoot(); root != "" {
-		return filepath.Join(root, ".aireview")
+		return filepath.Join(root, ".nota")
 	}
-	return ".aireview"
+	return ".nota"
 }
 
 func runBehavior(args []string) error {
 	fs := flag.NewFlagSet("behavior", flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: aireview behavior [tagname]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: nota behavior [tagname]\n\n")
 		fmt.Fprintf(os.Stderr, "With no arguments, outputs a table of all known tags and behaviors.\n")
 		fmt.Fprintf(os.Stderr, "With a tag name, outputs the behavior text for that tag.\n")
 	}

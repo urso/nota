@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/urso/aireview/pkg/parser"
+	"github.com/urso/nota/pkg/parser"
 )
 
 func TestExtractContext(t *testing.T) {

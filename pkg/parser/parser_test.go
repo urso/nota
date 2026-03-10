@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/urso/aireview/pkg/scanner"
+	"github.com/urso/nota/pkg/scanner"
 )
 
 // mockCommentScanner is a mock CommentScanner for testing.

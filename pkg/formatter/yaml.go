@@ -3,8 +3,8 @@ package formatter
 import (
 	"io"
 
-	"github.com/urso/aireview/pkg/grouper"
-	"github.com/urso/aireview/pkg/parser"
+	"github.com/urso/nota/pkg/grouper"
+	"github.com/urso/nota/pkg/parser"
 	"gopkg.in/yaml.v3"
 )
 

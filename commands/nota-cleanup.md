@@ -1,16 +1,16 @@
 ---
-description: Remove resolved review files from .aireview/
+description: Remove resolved review files from .nota/
 allowed-tools: Bash
 ---
 
-# aireview-cleanup — Clean Up Resolved Reviews
+# nota-cleanup — Clean Up Resolved Reviews
 
-Remove tracking files from `.aireview/` that have `status: resolved` in their frontmatter.
+Remove tracking files from `.nota/` that have `status: resolved` in their frontmatter.
 
 ## Step 1: Find resolved files
 
 ```bash
-dir="$(git rev-parse --show-toplevel)/.aireview"
+dir="$(git rev-parse --show-toplevel)/.nota"
 for f in "$dir"/*.md; do
   [ -f "$f" ] || continue
   if awk '/^---$/{c++;next} c==1&&/^status:[[:space:]]*resolved/{found=1;exit} c>=2{exit} END{exit !found}' "$f"; then

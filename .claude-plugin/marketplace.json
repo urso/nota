@@ -1,11 +1,11 @@
 {
-  "name": "aireview-plugins",
+  "name": "nota-plugins",
   "owner": {
     "name": "urso"
   },
   "plugins": [
     {
-      "name": "aireview",
+      "name": "nota",
       "source": "./",
       "description": "Extract and manage structured code review comments from source code"
     }

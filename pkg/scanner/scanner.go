@@ -16,7 +16,7 @@
 //
 // Adapted from github.com/ianlewis/todos.
 // Original: internal/scanner/scanner.go
-// Changes: Package name updated. Imports updated to github.com/urso/aireview.
+// Changes: Package name updated. Imports updated to github.com/urso/nota.
 // Added byteOffset tracking and commentStartByte to populate StartByte/EndByte
 // fields on Comment structs for byte-precise deletion support.
 

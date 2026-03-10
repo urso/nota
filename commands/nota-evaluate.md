@@ -4,7 +4,7 @@ allowed-tools: Bash, Read
 argument-hint: [optional file or group to focus on]
 ---
 
-# aireview-evaluate — Critical Review Evaluation
+# nota-evaluate — Critical Review Evaluation
 
 Critically assess whether each review comment is valid. Flag false positives and unnecessary items. **No code changes.**
 

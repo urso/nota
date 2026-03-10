@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)"
 setup() {
   tmpdir=$(cd "$(mktemp -d)" && pwd -P)
   git init -q "$tmpdir"
-  mkdir -p "$tmpdir/.aireview"
+  mkdir -p "$tmpdir/.nota"
 }
 
 teardown() {
@@ -16,7 +16,7 @@ teardown() {
 write_tracking() {
   local name="$1"
   shift
-  cat > "$tmpdir/.aireview/$name" <<< "$@"
+  cat > "$tmpdir/.nota/$name" <<< "$@"
 }
 
 # Helper: run validate-tracking with a JSON input
@@ -29,21 +29,21 @@ run_validate() {
 # list-open.sh
 # ============================================================
 
-@test "list-open: no .aireview directory" {
-  rmdir "$tmpdir/.aireview"
+@test "list-open: no .nota directory" {
+  rmdir "$tmpdir/.nota"
   run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/list-open.sh'"
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
 
-@test "list-open: empty .aireview directory" {
+@test "list-open: empty .nota directory" {
   run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/list-open.sh'"
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
 
 @test "list-open: one open file" {
-  cat > "$tmpdir/.aireview/auth.md" <<'EOF'
+  cat > "$tmpdir/.nota/auth.md" <<'EOF'
 ---
 status: open
 group: auth
@@ -55,11 +55,11 @@ Fix token expiry
 EOF
   run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/list-open.sh'"
   [ "$status" -eq 0 ]
-  [ "$output" = "$tmpdir/.aireview/auth.md" ]
+  [ "$output" = "$tmpdir/.nota/auth.md" ]
 }
 
 @test "list-open: resolved file not listed" {
-  cat > "$tmpdir/.aireview/auth.md" <<'EOF'
+  cat > "$tmpdir/.nota/auth.md" <<'EOF'
 ---
 status: resolved
 group: auth
@@ -75,7 +75,7 @@ EOF
 }
 
 @test "list-open: mixed open and resolved" {
-  cat > "$tmpdir/.aireview/auth.md" <<'EOF'
+  cat > "$tmpdir/.nota/auth.md" <<'EOF'
 ---
 status: open
 group: auth
@@ -85,7 +85,7 @@ group: auth
 
 Fix token expiry
 EOF
-  cat > "$tmpdir/.aireview/api.md" <<'EOF'
+  cat > "$tmpdir/.nota/api.md" <<'EOF'
 ---
 status: resolved
 group: api
@@ -97,11 +97,11 @@ Done
 EOF
   run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/list-open.sh'"
   [ "$status" -eq 0 ]
-  [ "$output" = "$tmpdir/.aireview/auth.md" ]
+  [ "$output" = "$tmpdir/.nota/auth.md" ]
 }
 
 @test "list-open: multiple open files" {
-  cat > "$tmpdir/.aireview/auth.md" <<'EOF'
+  cat > "$tmpdir/.nota/auth.md" <<'EOF'
 ---
 status: open
 ---
@@ -110,7 +110,7 @@ status: open
 
 Fix
 EOF
-  cat > "$tmpdir/.aireview/api.md" <<'EOF'
+  cat > "$tmpdir/.nota/api.md" <<'EOF'
 ---
 status: open
 ---
@@ -222,7 +222,7 @@ EOF
 # ============================================================
 
 @test "validate: valid open file" {
-  cat > "$tmpdir/.aireview/auth.md" <<'EOF'
+  cat > "$tmpdir/.nota/auth.md" <<'EOF'
 ---
 status: open
 group: auth
@@ -232,12 +232,12 @@ group: auth
 
 Fix token expiry
 EOF
-  run run_validate "$tmpdir/.aireview/auth.md"
+  run run_validate "$tmpdir/.nota/auth.md"
   [ "$status" -eq 0 ]
 }
 
 @test "validate: valid resolved file" {
-  cat > "$tmpdir/.aireview/auth.md" <<'EOF'
+  cat > "$tmpdir/.nota/auth.md" <<'EOF'
 ---
 status: resolved
 group: auth
@@ -247,12 +247,12 @@ group: auth
 
 > Fixed
 EOF
-  run run_validate "$tmpdir/.aireview/auth.md"
+  run run_validate "$tmpdir/.nota/auth.md"
   [ "$status" -eq 0 ]
 }
 
 @test "validate: valid file with mixed sections" {
-  cat > "$tmpdir/.aireview/auth.md" <<'EOF'
+  cat > "$tmpdir/.nota/auth.md" <<'EOF'
 ---
 status: open
 ---
@@ -265,12 +265,12 @@ status: open
 
 Still open
 EOF
-  run run_validate "$tmpdir/.aireview/auth.md"
+  run run_validate "$tmpdir/.nota/auth.md"
   [ "$status" -eq 0 ]
 }
 
 @test "validate: invalid status value" {
-  cat > "$tmpdir/.aireview/bad.md" <<'EOF'
+  cat > "$tmpdir/.nota/bad.md" <<'EOF'
 ---
 status: pending
 ---
@@ -279,13 +279,13 @@ status: pending
 
 Something
 EOF
-  run run_validate "$tmpdir/.aireview/bad.md"
+  run run_validate "$tmpdir/.nota/bad.md"
   [ "$status" -eq 1 ]
   [[ "$output" == *"Invalid status"* ]]
 }
 
 @test "validate: missing status field" {
-  cat > "$tmpdir/.aireview/bad.md" <<'EOF'
+  cat > "$tmpdir/.nota/bad.md" <<'EOF'
 ---
 group: auth
 ---
@@ -294,13 +294,13 @@ group: auth
 
 Something
 EOF
-  run run_validate "$tmpdir/.aireview/bad.md"
+  run run_validate "$tmpdir/.nota/bad.md"
   [ "$status" -eq 1 ]
   [[ "$output" == *"Missing"* ]]
 }
 
 @test "validate: invalid section heading" {
-  cat > "$tmpdir/.aireview/bad.md" <<'EOF'
+  cat > "$tmpdir/.nota/bad.md" <<'EOF'
 ---
 status: open
 ---
@@ -309,13 +309,13 @@ status: open
 
 Not a valid heading
 EOF
-  run run_validate "$tmpdir/.aireview/bad.md"
+  run run_validate "$tmpdir/.nota/bad.md"
   [ "$status" -eq 1 ]
   [[ "$output" == *"Invalid section headings"* ]]
 }
 
 @test "validate: status open but all sections resolved" {
-  cat > "$tmpdir/.aireview/bad.md" <<'EOF'
+  cat > "$tmpdir/.nota/bad.md" <<'EOF'
 ---
 status: open
 ---
@@ -324,13 +324,13 @@ status: open
 
 Fixed
 EOF
-  run run_validate "$tmpdir/.aireview/bad.md"
+  run run_validate "$tmpdir/.nota/bad.md"
   [ "$status" -eq 1 ]
   [[ "$output" == *"status is still"* ]]
 }
 
 @test "validate: status resolved but has open sections" {
-  cat > "$tmpdir/.aireview/bad.md" <<'EOF'
+  cat > "$tmpdir/.nota/bad.md" <<'EOF'
 ---
 status: resolved
 ---
@@ -343,12 +343,12 @@ Fixed
 
 Still open
 EOF
-  run run_validate "$tmpdir/.aireview/bad.md"
+  run run_validate "$tmpdir/.nota/bad.md"
   [ "$status" -eq 1 ]
   [[ "$output" == *"open sections"* ]]
 }
 
-@test "validate: non-.aireview file is skipped" {
+@test "validate: non-.nota file is skipped" {
   cat > "$tmpdir/random.md" <<'EOF'
 no frontmatter at all
 EOF
@@ -357,14 +357,14 @@ EOF
 }
 
 @test "validate: missing frontmatter" {
-  cat > "$tmpdir/.aireview/bad.md" <<'EOF'
+  cat > "$tmpdir/.nota/bad.md" <<'EOF'
 no frontmatter here
 
 ## review — src/foo.go:1
 
 Something
 EOF
-  run run_validate "$tmpdir/.aireview/bad.md"
+  run run_validate "$tmpdir/.nota/bad.md"
   [ "$status" -eq 1 ]
   [[ "$output" == *"Missing frontmatter"* ]]
 }
