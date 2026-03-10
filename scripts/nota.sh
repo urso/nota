@@ -25,8 +25,13 @@ shift
 # Build the binary in the plugin root, then run it from the current directory
 # so that git-based file resolution works correctly.
 bin="${CLAUDE_PLUGIN_ROOT}/.bin/nota"
-newest_src=$(find "$CLAUDE_PLUGIN_ROOT" -name '*.go' -newer "$bin" -print -quit 2>/dev/null)
-if [ ! -f "$bin" ] || [ -n "$newest_src" ] || [ "$CLAUDE_PLUGIN_ROOT/go.mod" -nt "$bin" ]; then
+needs_build=false
+if [ ! -f "$bin" ]; then
+  needs_build=true
+elif [ -n "$(find "$CLAUDE_PLUGIN_ROOT" -name '*.go' -newer "$bin" -print -quit 2>/dev/null)" ] || [ "$CLAUDE_PLUGIN_ROOT/go.mod" -nt "$bin" ]; then
+  needs_build=true
+fi
+if [ "$needs_build" = true ]; then
   mkdir -p "${CLAUDE_PLUGIN_ROOT}/.bin"
   tmp=$(mktemp "${bin}.XXXXXX")
   if go build -C "$CLAUDE_PLUGIN_ROOT" -o "$tmp" ./cmd/nota/; then
