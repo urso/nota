@@ -5,9 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,13 +67,9 @@ func addSharedFlags(fs *flag.FlagSet) (format *string, ctx *int, modified, unsta
 	return
 }
 
-func resolveFiles(fs *flag.FlagSet, modified, unstaged, staged, all *bool) ([]string, error) {
+func resolveFiles(fs *flag.FlagSet, modified, unstaged, staged, all *bool) (iter.Seq[string], error) {
 	if fs.NArg() > 0 {
-		return fs.Args(), nil
-	}
-
-	if !git.IsAvailable() {
-		return nil, fmt.Errorf("not in a git repository. Use explicit file paths: nota [command] file1.go file2.go")
+		return slices.Values(fs.Args()), nil
 	}
 
 	count := 0
@@ -91,34 +89,89 @@ func resolveFiles(fs *flag.FlagSet, modified, unstaged, staged, all *bool) ([]st
 		return nil, fmt.Errorf("only one scope flag allowed (--modified, --unstaged, --staged, --all)")
 	}
 
-	var scope git.Scope
-	switch {
-	case *unstaged:
-		scope = git.ScopeUnstaged
-	case *staged:
-		scope = git.ScopeStaged
-	case *all:
-		scope = git.ScopeAll
-	default:
-		scope = git.ScopeModified
+	// Try git first.
+	root, gitErr := git.RepoRoot("")
+	if gitErr == nil {
+		var scope git.Scope
+		switch {
+		case *unstaged:
+			scope = git.ScopeUnstaged
+		case *staged:
+			scope = git.ScopeStaged
+		case *all:
+			scope = git.ScopeAll
+		default:
+			scope = git.ScopeModified
+		}
+
+		gitFiles, err := git.ListFiles(scope, "")
+		if err != nil {
+			return nil, err
+		}
+
+		files := make([]string, len(gitFiles))
+		for i, f := range gitFiles {
+			files[i] = filepath.Join(root, f)
+		}
+		return slices.Values(files), nil
 	}
 
-	root, err := git.RepoRoot("")
+	// Not in a git repo. Only --all (or default) makes sense without git.
+	if *modified || *unstaged || *staged {
+		return nil, fmt.Errorf("--modified, --unstaged, and --staged require a git repository. Use explicit file paths or --all")
+	}
+
+	// Walk up from $PWD to find a project root (directory containing .nota/).
+	root, err := findProjectRoot()
 	if err != nil {
-		return nil, fmt.Errorf("not in a git repository. Use explicit file paths: nota [command] file1.go file2.go")
+		return nil, fmt.Errorf("not in a git repository and no .nota/ found. Use explicit file paths: nota [command] file1.go file2.go")
 	}
 
-	gitFiles, err := git.ListFiles(scope, "")
+	return walkFiles(root), nil
+}
+
+// findProjectRoot walks up from the current directory looking for a .nota/ directory.
+// Returns the directory containing .nota/, or an error if none found.
+func findProjectRoot() (string, error) {
+	dir, err := os.Getwd()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-
-	files := make([]string, len(gitFiles))
-	for i, f := range gitFiles {
-		files[i] = filepath.Join(root, f)
+	for {
+		if info, err := os.Stat(filepath.Join(dir, ".nota")); err == nil && info.IsDir() {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("no .nota/ directory found")
+		}
+		dir = parent
 	}
+}
 
-	return files, nil
+// walkFiles yields regular files under root, skipping hidden directories.
+func walkFiles(root string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil // skip unreadable entries
+			}
+			if info.IsDir() {
+				name := info.Name()
+				if strings.HasPrefix(name, ".") && name != "." {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !info.Mode().IsRegular() {
+				return nil
+			}
+			if !yield(path) {
+				return filepath.SkipAll
+			}
+			return nil
+		})
+	}
 }
 
 func runList(args []string) error {
@@ -408,18 +461,20 @@ func reopenIfResolved(content []byte) []byte {
 	return result
 }
 
-// repoRoot returns the git repository root path, or "" if not in a git repo.
-func repoRoot() string {
-	root, err := git.RepoRoot("")
-	if err != nil {
-		return ""
+// projectRoot returns the project root path, trying git first then walking up for .nota/.
+func projectRoot() string {
+	if root, err := git.RepoRoot(""); err == nil {
+		return root
 	}
-	return root
+	if root, err := findProjectRoot(); err == nil {
+		return root
+	}
+	return ""
 }
 
-// localExtDir returns the .nota directory path based on repo root.
+// localExtDir returns the .nota directory path based on the project root.
 func localExtDir() string {
-	if root := repoRoot(); root != "" {
+	if root := projectRoot(); root != "" {
 		return filepath.Join(root, ".nota")
 	}
 	return ".nota"

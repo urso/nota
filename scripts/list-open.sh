@@ -1,12 +1,21 @@
 #!/bin/bash
 # Lists .nota/*.md files that have status: open in frontmatter.
-# Resolves .nota/ from the git repo root and outputs absolute paths.
-# Exits 0 even if none found.
+# Resolves .nota/ from the git repo root (or by walking up from $PWD).
+# Outputs absolute paths. Exits 0 even if none found.
 
 root=$(git rev-parse --show-toplevel 2>/dev/null)
 if [ -z "$root" ]; then
-  echo "error: not in a git repository" >&2
-  exit 1
+  # Walk up from $PWD looking for a .nota/ directory
+  d=$(pwd)
+  while [ "$d" != "/" ]; do
+    if [ -d "$d/.nota" ]; then
+      root="$d"
+      break
+    fi
+    d=$(dirname "$d")
+  done
+  # Fall back to $PWD if nothing found (will exit cleanly if no .nota/)
+  root="${root:-$(pwd)}"
 fi
 
 dir="$root/.nota"

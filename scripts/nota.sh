@@ -13,14 +13,24 @@ if ! command -v go &>/dev/null; then
   exit 1
 fi
 
-root=$(git rev-parse --show-toplevel 2>/dev/null)
+root=$(git rev-parse --show-toplevel 2>/dev/null) || true
 if [ -z "$root" ]; then
-  echo "error: not in a git repository" >&2
-  exit 1
+  # Walk up from $PWD looking for a .nota/ directory
+  d=$(pwd)
+  while [ "$d" != "/" ]; do
+    if [ -d "$d/.nota" ]; then
+      root="$d"
+      break
+    fi
+    d=$(dirname "$d")
+  done
+  if [ -z "$root" ]; then
+    root=$(pwd)
+  fi
 fi
 
 subcommand="${1:-list}"
-shift
+[ $# -gt 0 ] && shift
 
 # Build the binary in the plugin root, then run it from the current directory
 # so that git-based file resolution works correctly.
