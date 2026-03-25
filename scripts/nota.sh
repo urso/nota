@@ -59,8 +59,8 @@ case "$subcommand" in
   list|delete)
     exec "$bin" "$subcommand" "$@"
     ;;
-  behavior)
-    exec "$bin" behavior "$@"
+  behavior|find|validate|read)
+    exec "$bin" "$subcommand" "$@"
     ;;
   *)
     echo "error: unknown subcommand: $subcommand" >&2

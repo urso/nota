@@ -19,6 +19,7 @@ import (
 	"github.com/urso/nota/pkg/formatter"
 	"github.com/urso/nota/pkg/git"
 	"github.com/urso/nota/pkg/grouper"
+	"github.com/urso/nota/pkg/tracking"
 )
 
 func main() {
@@ -42,13 +43,19 @@ func run(args []string) error {
 		return runExtract(args[2:])
 	case "behavior":
 		return runBehavior(args[2:])
+	case "find":
+		return runFind(args[2:])
+	case "validate":
+		return runValidate(args[2:])
+	case "read":
+		return runRead(args[2:])
 	default:
 		// F8: If first arg starts with "-" or looks like a file path, default to list.
 		// Otherwise report an error for unknown subcommands.
 		if strings.HasPrefix(args[1], "-") || looksLikeFilePath(args[1]) {
 			return runList(args[1:])
 		}
-		return fmt.Errorf("unknown subcommand: %s\nUsage: nota [list|delete|extract|behavior] [flags] [files...]", args[1])
+		return fmt.Errorf("unknown subcommand: %s\nUsage: nota [list|delete|extract|behavior|find|validate|read] [flags] [files...]", args[1])
 	}
 }
 
@@ -527,6 +534,100 @@ func runBehavior(args []string) error {
 		}
 	}
 
+	return nil
+}
+
+func runFind(args []string) error {
+	fs := flag.NewFlagSet("find", flag.ExitOnError)
+	status := fs.String("status", "", "Filter by status (open or resolved)")
+	tag := fs.String("tag", "", "Filter by tag")
+	refsOf := fs.String("refs-of", "", "List files that <name> references")
+	depsOf := fs.String("deps-of", "", "List files that <name> depends on")
+	referencedBy := fs.String("referenced-by", "", "List files that reference <name>")
+	blockedBy := fs.String("blocked-by", "", "List files that depend on <name>")
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: nota find [flags] [name]\n\n")
+		fmt.Fprintf(os.Stderr, "Query .nota/ tracking files by name, status, tag, or relationships.\n\n")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	root := projectRoot()
+	dir := filepath.Join(root, ".nota")
+
+	opts := tracking.FindOptions{
+		Dir:          dir,
+		Status:       *status,
+		Tag:          *tag,
+		RefsOf:       *refsOf,
+		DepsOf:       *depsOf,
+		ReferencedBy: *referencedBy,
+		BlockedBy:    *blockedBy,
+	}
+	if fs.NArg() > 0 {
+		opts.Name = fs.Arg(0)
+	}
+
+	results, err := tracking.Find(opts)
+	if err != nil {
+		return err
+	}
+	for _, r := range results {
+		fmt.Println(r)
+	}
+	return nil
+}
+
+func runValidate(args []string) error {
+	fs := flag.NewFlagSet("validate", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: nota validate <file>\n\n")
+		fmt.Fprintf(os.Stderr, "Validate a .nota/ tracking file.\n")
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		fs.Usage()
+		return fmt.Errorf("exactly one file required")
+	}
+
+	filePath := fs.Arg(0)
+	errs, err := tracking.ValidateFile(filePath)
+	if err != nil {
+		return err
+	}
+	if len(errs) > 0 {
+		fmt.Fprintf(os.Stdout, "Tracking file validation failed for %s:\n", filePath)
+		for _, e := range errs {
+			fmt.Println(e)
+		}
+		return fmt.Errorf("validation failed")
+	}
+	return nil
+}
+
+func runRead(args []string) error {
+	fs := flag.NewFlagSet("read", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: nota read <file>\n\n")
+		fmt.Fprintf(os.Stderr, "Read a tracking file, stripping resolved/wontfix sections.\n")
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		fs.Usage()
+		return fmt.Errorf("exactly one file required")
+	}
+
+	content, err := tracking.ReadOpen(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	fmt.Print(content)
 	return nil
 }
 
