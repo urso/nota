@@ -200,6 +200,12 @@ Extracted comments are saved to `.nota/` in your repo root as markdown files wit
 ---
 status: open
 group: auth
+depends-on:
+  - session
+references:
+  - auth-legacy
+tags:
+  - security
 ---
 
 ## review — handlers/auth.go:42
@@ -219,6 +225,9 @@ group: auth
 - Unnamed comments produce `review-001.md`, `review-002.md`, etc.
 - Sections are marked `[resolved]` or `[wontfix]` when addressed
 - File status changes to `resolved` when all sections are complete
+- `depends-on` — list of tracking file stems that should be addressed first
+- `references` — list of tracking file stems with relevant context (e.g. resolved reviews with prior decisions)
+- `tags` — labels for filtering and grouping (query with `find-review.sh --tag`)
 
 A validation hook runs automatically after edits to `.nota/` files to catch formatting errors.
 

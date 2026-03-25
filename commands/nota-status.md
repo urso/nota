@@ -13,6 +13,6 @@ If no tracking files exist, report no reviews and stop.
 
 Read each file's frontmatter and section headings. Present a summary table:
 
-| File | Group | Status | Open | Resolved | Wontfix |
+| File | Group | Status | Open | Resolved | Wontfix | Depends-on | References | Tags |
 
-Then: total counts, classification by theme, and suggestion of what to tackle next.
+Then: total counts, classification by theme, dependency graph (which items block others), and suggestion of what to tackle next (prefer items with no unsatisfied dependencies).

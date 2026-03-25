@@ -27,8 +27,9 @@ $ARGUMENTS
 ## Step 2: Evaluate each item
 
 For each open item:
-1. Read the relevant source code
-2. Assess validity — is the reviewer correct? Is the suggested change appropriate? Are concerns well-founded?
+1. Check if the tracking file has `references` or `depends-on` in its frontmatter — if so, read those files for context
+2. Read the relevant source code
+3. Assess validity — is the reviewer correct? Is the suggested change appropriate? Are concerns well-founded?
 
 ## Step 3: Present findings
 

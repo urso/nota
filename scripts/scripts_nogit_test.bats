@@ -151,6 +151,105 @@ EOF
   [ "$status" -eq 0 ]
 }
 
+# ============================================================
+# find-review.sh — non-git fallback
+# ============================================================
+
+@test "find-review (no git): no .nota directory exits cleanly" {
+  run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/find-review.sh' --status open"
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
+@test "find-review (no git): finds file by name via .nota in PWD" {
+  mkdir -p "$tmpdir/.nota"
+  cat > "$tmpdir/.nota/auth.md" <<'EOF'
+---
+status: open
+---
+
+## review — src/auth/login.go:42
+
+Fix
+EOF
+  run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/find-review.sh' auth"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$tmpdir/.nota/auth.md" ]
+}
+
+@test "find-review (no git): walks up to find .nota in parent" {
+  mkdir -p "$tmpdir/.nota"
+  mkdir -p "$tmpdir/src/pkg"
+  cat > "$tmpdir/.nota/auth.md" <<'EOF'
+---
+status: open
+---
+
+## review — src/auth/login.go:42
+
+Fix
+EOF
+  run bash -c "cd '$tmpdir/src/pkg' && bash '$SCRIPT_DIR/find-review.sh' auth"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$tmpdir/.nota/auth.md" ]
+}
+
+@test "find-review (no git): filter by status" {
+  mkdir -p "$tmpdir/.nota"
+  cat > "$tmpdir/.nota/open1.md" <<'EOF'
+---
+status: open
+---
+
+## review — src/foo.go:1
+
+Fix
+EOF
+  cat > "$tmpdir/.nota/done1.md" <<'EOF'
+---
+status: resolved
+---
+
+## [resolved] review — src/bar.go:1
+
+> Fixed
+EOF
+  run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/find-review.sh' --status open"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$tmpdir/.nota/open1.md" ]
+}
+
+@test "find-review (no git): deps-of follows depends-on" {
+  mkdir -p "$tmpdir/.nota"
+  cat > "$tmpdir/.nota/dep.md" <<'EOF'
+---
+status: open
+---
+
+## review — src/foo.go:1
+
+Fix first
+EOF
+  cat > "$tmpdir/.nota/main.md" <<'EOF'
+---
+status: open
+depends-on:
+  - dep
+---
+
+## review — src/bar.go:1
+
+Fix after
+EOF
+  run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/find-review.sh' --deps-of main"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$tmpdir/.nota/dep.md" ]
+}
+
+# ============================================================
+# nota.sh — non-git root resolution
+# ============================================================
+
 @test "nota.sh (no git): extract finds comments in explicit files" {
   mkdir -p "$tmpdir/.nota"
   cat > "$tmpdir/test.go" <<'EOF'

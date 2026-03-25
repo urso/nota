@@ -38,17 +38,28 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/read-open.sh <file>
 
 Follow the behavior description for each tag when addressing items. Present a summary:
 - Item count by tag type, grouped by theme/file
-- Suggested order
+- Dependency relationships (check `depends-on` in frontmatter)
+- Suggested order (items with unsatisfied dependencies should be addressed later)
 - Ask whether to address all or focus on specific items
 
 $ARGUMENTS
 
-## Step 4: Address each item
+## Step 4: Gather context and address each item
+
+Before addressing an item, check if the tracking file has `references` or `depends-on` in its frontmatter. If so, read the referenced files to gather context — these may include resolved reviews with relevant decisions or discussions.
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/find-review.sh --refs-of <name>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/find-review.sh --deps-of <name>
+```
+
+Where `<name>` is the filename stem (e.g. `auth` for `.nota/auth.md`).
 
 For each item:
-1. Read the relevant source code
-2. Follow the tag's behavior — fix, discuss, explain, implement, etc.
-3. For tags requiring agreement, do NOT change code until the developer confirms
+1. Read referenced/dependent tracking files for context
+2. Read the relevant source code
+3. Follow the tag's behavior — fix, discuss, explain, implement, etc.
+4. For tags requiring agreement, do NOT change code until the developer confirms
 
 ### Convergence loop
 
