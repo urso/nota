@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -60,7 +61,7 @@ def helper():
     pass
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile, pyFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile, pyFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +123,7 @@ def helper():
     pass
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile, pyFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile, pyFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +217,7 @@ func hello() {
 }
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +250,7 @@ func TestFullPipelineDelete(t *testing.T) {
 	src := "package main\n\n// review(fix): remove this\nfunc hello() {\n\treturn\n}\n"
 	goFile := writeTestFile(t, dir, "code.go", src)
 
-	_, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
+	_, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +288,7 @@ func third() {}
 `
 	goFile := writeTestFile(t, dir, "multi.go", src)
 
-	comments, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +321,7 @@ func TestFullPipelineDeletePreservesPermissions(t *testing.T) {
 	goFile := writeTestFileWithPerm(t, dir, "perm.go",
 		"package main\n// review: delete me\nfunc hello() {}\n", 0o755)
 
-	_, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
+	_, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +344,7 @@ func TestCommentOnlyLineFullyRemoved(t *testing.T) {
 	dir := t.TempDir()
 	goFile := writeTestFile(t, dir, "code.go", "package main\n\n    // review: msg\nfunc hello() {}\n")
 
-	_, fileContents, fileRanges, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	_, fileContents, fileRanges, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +364,7 @@ func TestTrailingCommentPreservesCode(t *testing.T) {
 	dir := t.TempDir()
 	goFile := writeTestFile(t, dir, "code.go", "package main\n\nx := 1 // review: msg\nfunc hello() {}\n")
 
-	_, fileContents, fileRanges, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	_, fileContents, fileRanges, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +397,7 @@ def other():
     pass
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{pyFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{pyFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +430,7 @@ func TestPythonDeleteComments(t *testing.T) {
 
 	pyFile := writeTestFile(t, dir, "app.py", "# review: delete me\ndef hello():\n    pass\n")
 
-	_, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{pyFile}), nil)
+	_, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{pyFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +466,7 @@ int main() {
 }
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{cFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{cFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,7 +508,7 @@ func TestCBlockCommentDelete(t *testing.T) {
 
 	cFile := writeTestFile(t, dir, "main.c", "#include <stdio.h>\n\n/* review: remove */\nint main() {\n    return 0;\n}\n")
 
-	_, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{cFile}), nil)
+	_, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{cFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,7 +542,7 @@ class Auth
 end
 `)
 
-	comments, _, _, _, err := processFiles(slices.Values([]string{rbFile}), nil)
+	comments, _, _, _, _, err := processFiles(slices.Values([]string{rbFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -577,7 +578,7 @@ def audit():
     pass
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{file1, file2, file3}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{file1, file2, file3}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -620,7 +621,7 @@ func TestCrossFileDeleteAcrossFiles(t *testing.T) {
 	file1 := writeTestFile(t, dir, "a.go", "package main\n\n// review(x): comment a\nfunc a() {}\n")
 	file2 := writeTestFile(t, dir, "b.go", "package main\n\n// review(x): comment b\nfunc b() {}\n")
 
-	_, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{file1, file2}), nil)
+	_, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{file1, file2}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -655,7 +656,7 @@ func handleRequest() {
 }
 `)
 
-	comments, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,6 +705,58 @@ func handleRequest() {
 	}
 }
 
+// --- Adjusted line numbers (golden file tests) ---
+
+func TestAdjustedLineNumbers(t *testing.T) {
+	entries, err := os.ReadDir("testdata/adjusted_lines")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasSuffix(name, ".golden.json") {
+			continue
+		}
+
+		t.Run(name, func(t *testing.T) {
+			srcPath := filepath.Join("testdata/adjusted_lines", name)
+			goldenPath := srcPath + ".golden.json"
+
+			goldenData, err := os.ReadFile(goldenPath)
+			if err != nil {
+				t.Fatalf("reading golden file: %v", err)
+			}
+
+			var expected []struct {
+				Name string `json:"name"`
+				Line int    `json:"line"`
+			}
+			if err := json.Unmarshal(goldenData, &expected); err != nil {
+				t.Fatalf("parsing golden file: %v", err)
+			}
+
+			comments, _, _, _, _, err := processFiles(slices.Values([]string{srcPath}), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if len(comments) != len(expected) {
+				t.Fatalf("expected %d comments, got %d", len(expected), len(comments))
+			}
+
+			for i, exp := range expected {
+				if comments[i].Name != exp.Name {
+					t.Errorf("comment %d: expected name %q, got %q", i, exp.Name, comments[i].Name)
+				}
+				if comments[i].Line != exp.Line {
+					t.Errorf("comment %d (%s): expected line %d, got %d", i, exp.Name, exp.Line, comments[i].Line)
+				}
+			}
+		})
+	}
+}
+
 // --- Edge cases ---
 
 func TestNoCommentsProducesEmptyOutput(t *testing.T) {
@@ -715,7 +768,7 @@ func TestNoCommentsProducesEmptyOutput(t *testing.T) {
 func hello() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -764,7 +817,7 @@ func TestBinaryFileSkipped(t *testing.T) {
 
 	goodFile := writeTestFile(t, dir, "good.go", "package main\n// review: msg\n")
 
-	comments, _, _, _, err := processFiles(slices.Values([]string{binPath, goodFile}), nil)
+	comments, _, _, _, _, err := processFiles(slices.Values([]string{binPath, goodFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -780,7 +833,7 @@ func TestUnreadableFileSkipped(t *testing.T) {
 	goodFile := writeTestFile(t, dir, "good.go", "package main\n// review: msg\n")
 	badFile := filepath.Join(dir, "nonexistent.go")
 
-	comments, _, _, _, err := processFiles(slices.Values([]string{badFile, goodFile}), nil)
+	comments, _, _, _, _, err := processFiles(slices.Values([]string{badFile, goodFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -797,7 +850,7 @@ func TestUnsupportedLanguageSkipped(t *testing.T) {
 	unknownFile := writeTestFile(t, dir, "data.xyz", "review: something\n")
 	goodFile := writeTestFile(t, dir, "good.go", "package main\n// review: msg\n")
 
-	comments, _, _, _, err := processFiles(slices.Values([]string{unknownFile, goodFile}), nil)
+	comments, _, _, _, _, err := processFiles(slices.Values([]string{unknownFile, goodFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -820,7 +873,7 @@ func TestCaseSensitiveTags(t *testing.T) {
 func hello() {}
 `)
 
-	comments, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, _, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -846,7 +899,7 @@ func TestMultiLineReviewCommentMerged(t *testing.T) {
 func hello() {}
 `)
 
-	comments, _, ranges, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, _, ranges, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -883,7 +936,7 @@ func TestMultiLineReviewCommentDeletesBothLines(t *testing.T) {
 func hello() {}
 `)
 
-	_, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
+	_, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -916,7 +969,7 @@ func TestMultiLineReviewSeparatedByBlankLine(t *testing.T) {
 func hello() {}
 `)
 
-	comments, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, _, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -949,7 +1002,7 @@ func hello() {
 }
 `)
 
-	comments, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, _, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -981,7 +1034,7 @@ func hello() {}
 func other() {}
 `)
 
-	comments, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, _, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1024,7 +1077,7 @@ func TestProcessFilesReturnsByteRanges(t *testing.T) {
 
 	goFile := writeTestFile(t, dir, "ranges.go", "package main\n\n// review: delete\nfunc hello() {}\n")
 
-	_, _, fileRanges, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	_, _, fileRanges, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1206,7 +1259,7 @@ func validate() {
 func other() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1259,7 +1312,7 @@ func first() {}
 func second() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1311,7 +1364,7 @@ func TestExtractDirAppendToExisting(t *testing.T) {
 func newFunc() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1354,7 +1407,7 @@ func TestExtractDirReopensResolvedFile(t *testing.T) {
 func newFunc() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1401,7 +1454,7 @@ func TestExtractDirReviewNumbering(t *testing.T) {
 func hello() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1432,7 +1485,7 @@ func handleRequest() {}
 func other() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1467,7 +1520,7 @@ func handleRequest() {
 }
 `)
 
-	comments, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1576,7 +1629,7 @@ func TestExtractDirNoComments(t *testing.T) {
 func hello() {}
 `)
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1614,7 +1667,7 @@ func hot() {}
 		"critique": {}, "see": {}, "also": {},
 	}
 
-	comments, _, _, _, err := processFiles(slices.Values([]string{goFile}), knownTags)
+	comments, _, _, _, _, err := processFiles(slices.Values([]string{goFile}), knownTags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1653,7 +1706,7 @@ func hello() {}
 		"see": {}, "also": {},
 	}
 
-	comments, _, _, _, err := processFiles(slices.Values([]string{goFile}), knownTags)
+	comments, _, _, _, _, err := processFiles(slices.Values([]string{goFile}), knownTags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1676,7 +1729,7 @@ func TestExtractDoesNotDeleteUnknownTags(t *testing.T) {
 		"review": {}, "see": {}, "also": {},
 	}
 
-	_, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{goFile}), knownTags)
+	_, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{goFile}), knownTags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1721,7 +1774,7 @@ func other() {}
 		"critique": {}, "propose": {}, "see": {}, "also": {},
 	}
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), knownTags)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), knownTags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1856,7 +1909,7 @@ func last() {}
 	// Use LoadAll (no local dir) to get the embedded tag set.
 	_, tagSet := extension.LoadAll("")
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), tagSet)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), tagSet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1926,7 +1979,7 @@ func other() {}
 		t.Fatal("expected custom in tag set")
 	}
 
-	comments, fileContents, _, _, err := processFiles(slices.Values([]string{goFile}), tagSet)
+	comments, fileContents, _, _, _, err := processFiles(slices.Values([]string{goFile}), tagSet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1963,7 +2016,7 @@ func TestE2EExtractDoesNotDeleteNonExtensionTags(t *testing.T) {
 
 	_, tagSet := extension.LoadAll("")
 
-	_, fileContents, fileRanges, filePerms, err := processFiles(slices.Values([]string{goFile}), tagSet)
+	_, fileContents, fileRanges, _, filePerms, err := processFiles(slices.Values([]string{goFile}), tagSet)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,8 +6,10 @@ import (
 	"iter"
 	"os"
 	"runtime"
+	"sort"
 	"sync"
 
+	"github.com/urso/nota/pkg/blocks"
 	"github.com/urso/nota/pkg/deleter"
 	"github.com/urso/nota/pkg/parser"
 	"github.com/urso/nota/pkg/scanner"
@@ -19,13 +21,14 @@ type fileResult struct {
 	comments []parser.ReviewComment
 	contents []byte
 	ranges   []deleter.ByteRange
+	blocks   *blocks.File
 	perm     os.FileMode
 }
 
 // processFiles runs scan → parse for each file using parallel workers.
-// Returns comments, file contents, byte ranges, and file permissions.
+// Returns comments (with adjusted line numbers), file contents, byte ranges, blocks, and file permissions.
 // When knownTags is non-nil, only tags in the set are accepted; otherwise all tags pass through.
-func processFiles(files iter.Seq[string], knownTags map[string]struct{}) ([]parser.ReviewComment, map[string][]byte, map[string][]deleter.ByteRange, map[string]os.FileMode, error) {
+func processFiles(files iter.Seq[string], knownTags map[string]struct{}) ([]parser.ReviewComment, map[string][]byte, map[string][]deleter.ByteRange, map[string]*blocks.File, map[string]os.FileMode, error) {
 	numWorkers := runtime.NumCPU()
 	paths := make(chan string)
 	results := make(chan fileResult)
@@ -58,6 +61,7 @@ func processFiles(files iter.Seq[string], knownTags map[string]struct{}) ([]pars
 	var allComments []parser.ReviewComment
 	fileContents := make(map[string][]byte)
 	fileRanges := make(map[string][]deleter.ByteRange)
+	fileBlocks := make(map[string]*blocks.File)
 	filePerms := make(map[string]os.FileMode)
 
 	for r := range results {
@@ -66,10 +70,13 @@ func processFiles(files iter.Seq[string], knownTags map[string]struct{}) ([]pars
 		if len(r.ranges) > 0 {
 			fileRanges[r.path] = r.ranges
 		}
+		if r.blocks != nil {
+			fileBlocks[r.path] = r.blocks
+		}
 		filePerms[r.path] = r.perm
 	}
 
-	return allComments, fileContents, fileRanges, filePerms, nil
+	return allComments, fileContents, fileRanges, fileBlocks, filePerms, nil
 }
 
 // processFile reads, scans, and parses a single file.
@@ -116,13 +123,45 @@ func processFile(filePath string, knownTags map[string]struct{}) (fileResult, bo
 		fmt.Fprintf(os.Stderr, "warning: parse error in %s: %v\n", filePath, err)
 	}
 
+	// Build blocks file and compute adjusted line numbers.
+	var bf *blocks.File
+	if len(ranges) > 0 {
+		blockRanges := make([]blocks.Range, len(ranges))
+		for i, r := range ranges {
+			blockRanges[i] = blocks.Range{Start: r.Start, End: r.End}
+		}
+		sort.Slice(blockRanges, func(i, j int) bool {
+			return blockRanges[i].Start < blockRanges[j].Start
+		})
+		bf = blocks.FromBytesAndRanges(result.DecodedContents, blockRanges)
+
+		// Adjust line numbers for each comment.
+		for i := range comments {
+			blockIdx := findBlockForByte(bf, ranges[i].Start)
+			if blockIdx >= 0 {
+				comments[i].Line = bf.AdjustedLine(blockIdx)
+			}
+		}
+	}
+
 	return fileResult{
 		path:     filePath,
 		comments: comments,
 		contents: result.DecodedContents,
 		ranges:   ranges,
+		blocks:   bf,
 		perm:     info.Mode().Perm(),
 	}, true
+}
+
+// findBlockForByte returns the block index containing the given byte offset.
+func findBlockForByte(f *blocks.File, pos int64) int {
+	for i, b := range f.Blocks {
+		if pos >= b.StartByte && pos < b.StartByte+int64(len(b.Content)) {
+			return i
+		}
+	}
+	return -1
 }
 
 // expandByteRange expands a comment byte range for whole-line deletion.

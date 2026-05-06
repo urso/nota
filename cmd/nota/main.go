@@ -194,7 +194,7 @@ func runList(args []string) error {
 	}
 
 	_, tagSet := extension.LoadAll(localExtDir())
-	comments, fileContents, _, _, err := processFiles(files, tagSet)
+	comments, fileContents, _, _, _, err := processFiles(files, tagSet)
 	if err != nil {
 		return err
 	}
@@ -246,7 +246,7 @@ func runDelete(args []string) error {
 	}
 
 	_, tagSet := extension.LoadAll(localExtDir())
-	_, fileContents, fileRanges, filePerms, err := processFiles(files, tagSet)
+	_, fileContents, fileRanges, _, filePerms, err := processFiles(files, tagSet)
 	if err != nil {
 		return err
 	}
@@ -268,7 +268,7 @@ func runExtract(args []string) error {
 	}
 
 	_, tagSet := extension.LoadAll(localExtDir())
-	comments, fileContents, fileRanges, filePerms, err := processFiles(files, tagSet)
+	comments, fileContents, fileRanges, _, filePerms, err := processFiles(files, tagSet)
 	if err != nil {
 		return err
 	}
