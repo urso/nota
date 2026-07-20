@@ -249,12 +249,12 @@ func TestTagScanner(t *testing.T) {
 
 func TestTagScannerWithKnownTags(t *testing.T) {
 	knownTags := map[string]struct{}{
-		"review":  {},
-		"discuss": {},
-		"explain": {},
+		"review":   {},
+		"discuss":  {},
+		"explain":  {},
 		"critique": {},
-		"see":     {},
-		"also":    {},
+		"see":      {},
+		"also":     {},
 	}
 
 	tests := []struct {

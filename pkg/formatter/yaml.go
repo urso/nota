@@ -63,8 +63,8 @@ func FormatYAML(w io.Writer, groups []grouper.Group) error {
 
 		for _, r := range g.References {
 			yg.References = append(yg.References, yamlReference{
-				File: r.File,
-				Line: r.Line,
+				File:    r.File,
+				Line:    r.Line,
 				Context: ensureContext(r.Context.Before, r.Context.After),
 			})
 		}

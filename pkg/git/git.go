@@ -133,3 +133,24 @@ func addGitFiles(set map[string]struct{}, dir string, args ...string) error {
 
 	return nil
 }
+
+// HeadCommit returns the current HEAD commit SHA.
+// dir is the working directory for git commands; if empty, uses os.Getwd().
+func HeadCommit(dir string) (string, error) {
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("getting working directory: %w", err)
+		}
+	}
+
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+
+	return strings.TrimSpace(string(out)), nil
+}
