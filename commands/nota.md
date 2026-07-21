@@ -11,7 +11,7 @@ The developer is the reviewer. Respond to their code review comments following a
 ## Step 1: Extract new comments
 
 ```
-!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh extract --all 2>&1`
+!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh local extract --all 2>&1`
 ```
 
 If no comments found, skip to Step 2.
