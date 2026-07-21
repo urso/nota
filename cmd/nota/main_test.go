@@ -1101,31 +1101,6 @@ func TestProcessFilesReturnsByteRanges(t *testing.T) {
 	}
 }
 
-// --- looksLikeFilePath ---
-
-func TestLooksLikeFilePath(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected bool
-	}{
-		{"file.go", true},
-		{"src/main.go", true},
-		{"main", false},
-		{"list", false},
-		{".", true},
-		{"../file.py", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := looksLikeFilePath(tt.input)
-			if got != tt.expected {
-				t.Errorf("looksLikeFilePath(%q) = %v, want %v", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
 // --- writeOutput ---
 
 func TestWriteOutput(t *testing.T) {
@@ -1695,13 +1670,14 @@ func other() {}
 }
 
 func TestBehaviorSubcommandTable(t *testing.T) {
-	// Capture stdout from runBehavior with no args.
+	// Capture stdout from BehaviorCmd.Run() with no args.
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	t.Cleanup(func() { os.Stdout = oldStdout })
 
-	err := runBehavior(nil)
+	cmd := BehaviorCmd{}
+	err := cmd.Run()
 
 	_ = w.Close()
 
@@ -1735,7 +1711,8 @@ func TestBehaviorSubcommandSingleTag(t *testing.T) {
 	os.Stdout = w
 	t.Cleanup(func() { os.Stdout = oldStdout })
 
-	err := runBehavior([]string{"review"})
+	cmd := BehaviorCmd{Tag: "review"}
+	err := cmd.Run()
 
 	_ = w.Close()
 
@@ -1758,7 +1735,8 @@ func TestBehaviorSubcommandSee(t *testing.T) {
 	os.Stdout = w
 	t.Cleanup(func() { os.Stdout = oldStdout })
 
-	err := runBehavior([]string{"see"})
+	cmd := BehaviorCmd{Tag: "see"}
+	err := cmd.Run()
 
 	_ = w.Close()
 
@@ -1776,16 +1754,10 @@ func TestBehaviorSubcommandSee(t *testing.T) {
 }
 
 func TestBehaviorSubcommandUnknown(t *testing.T) {
-	err := runBehavior([]string{"nonexistent_tag_xyz"})
+	cmd := BehaviorCmd{Tag: "nonexistent_tag_xyz"}
+	err := cmd.Run()
 	if err == nil {
 		t.Error("expected error for unknown tag")
-	}
-}
-
-func TestBehaviorSubcommandTooManyArgs(t *testing.T) {
-	err := runBehavior([]string{"a", "b"})
-	if err == nil {
-		t.Error("expected error for too many args")
 	}
 }
 
