@@ -124,7 +124,7 @@ func addGitFiles(set map[string]struct{}, dir string, args ...string) error {
 		return fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			set[line] = struct{}{}
@@ -153,4 +153,18 @@ func HeadCommit(dir string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(out)), nil
+}
+
+// UserName returns the git user.name config value, or "user" as fallback.
+func UserName() string {
+	cmd := exec.Command("git", "config", "user.name")
+	out, err := cmd.Output()
+	if err != nil {
+		return "user"
+	}
+	name := strings.TrimSpace(string(out))
+	if name == "" {
+		return "user"
+	}
+	return name
 }

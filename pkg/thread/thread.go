@@ -5,54 +5,63 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/xml"
-	"fmt"
+	mrand "math/rand/v2"
+	"slices"
 	"time"
 )
 
+// GoalValues lists all valid goal values.
+var GoalValues = []string{"review", "discuss", "impl", "explain", "refactor", "test", "doc", "propose", "critique"}
+
+// ValidGoal returns true if the goal is valid.
+func ValidGoal(goal string) bool {
+	return slices.Contains(GoalValues, goal)
+}
+
 // Thread represents a conversation thread with optional code anchor and sync state.
 type Thread struct {
-	XMLName   xml.Name    `xml:"nota-thread"`
-	ID        string      `xml:"id,attr,omitempty"`
-	Status    string      `xml:"status,attr"`
-	Goal      string      `xml:"goal,attr,omitempty"`
-	Group     string      `xml:"group,attr,omitempty"`
-	Tags      string      `xml:"tags,attr,omitempty"`
-	DependsOn string      `xml:"depends-on,attr,omitempty"`
-	Anchor    *Anchor     `xml:"nota-anchor,omitempty"`
-	Sync      *SyncConfig `xml:"nota-sync,omitempty"`
-	Parent    *Parent     `xml:"nota-parent,omitempty"`
-	Refs      []Ref       `xml:"nota-ref,omitempty"`
-	Comments  []Comment   `xml:"nota-comment"`
+	XMLName   xml.Name    `xml:"nota-thread" json:"-"`
+	ID        string      `xml:"id,attr,omitempty" json:"id,omitempty"`
+	Status    string      `xml:"status,attr" json:"status"`
+	Goal      string      `xml:"goal,attr,omitempty" json:"goal,omitempty"`
+	Group     string      `xml:"group,attr,omitempty" json:"group,omitempty"`
+	Tags      string      `xml:"tags,attr,omitempty" json:"tags,omitempty"`
+	DependsOn string      `xml:"depends-on,attr,omitempty" json:"dependsOn,omitempty"`
+	Anchor    *Anchor     `xml:"nota-anchor,omitempty" json:"anchor,omitempty"`
+	Sync      *SyncConfig `xml:"nota-sync,omitempty" json:"sync,omitempty"`
+	Parent    *Parent     `xml:"nota-parent,omitempty" json:"parent,omitempty"`
+	Refs      []Ref       `xml:"nota-ref,omitempty" json:"refs,omitempty"`
+	Comments  []Comment   `xml:"nota-comment" json:"comments"`
 }
 
 // Parent references a parent thread.
 type Parent struct {
-	Ref string `xml:"ref,attr"`
+	Ref string `xml:"ref,attr" json:"ref"`
 }
 
 // Anchor represents a code location reference.
 type Anchor struct {
-	File           string `xml:"file,attr"`
-	Line           int    `xml:"line,attr"`
-	Commit         string `xml:"commit,attr,omitempty"`
-	ContentHash    string `xml:"content-hash,attr,omitempty"`
-	TracedToCommit string `xml:"traced-to-commit,attr,omitempty"`
-	Outdated       bool   `xml:"outdated,attr,omitempty"`
+	File           string `xml:"file,attr" json:"file"`
+	Line           int    `xml:"line,attr" json:"line"`
+	Commit         string `xml:"commit,attr,omitempty" json:"commit,omitempty"`
+	ContentHash    string `xml:"content-hash,attr,omitempty" json:"contentHash,omitempty"`
+	TracedToCommit string `xml:"traced-to-commit,attr,omitempty" json:"tracedToCommit,omitempty"`
+	Outdated       bool   `xml:"outdated,attr,omitempty" json:"outdated,omitempty"`
 }
 
 // SyncConfig holds external sync configuration for a thread.
 type SyncConfig struct {
-	Provider string `xml:"provider,attr"`
-	PR       string `xml:"pr,attr,omitempty"`
-	ThreadID string `xml:"thread-id,attr,omitempty"`
+	Provider string `xml:"provider,attr" json:"provider"`
+	PR       string `xml:"pr,attr,omitempty" json:"pr,omitempty"`
+	ThreadID string `xml:"thread-id,attr,omitempty" json:"threadId,omitempty"`
 }
 
 // Ref is a typed reference to another thread, file, or external link.
 // Exactly one of Thread, File, or Link should be set.
 type Ref struct {
-	Thread string `xml:"thread,attr,omitempty"`
-	File   string `xml:"file,attr,omitempty"`
-	Link   string `xml:"link,attr,omitempty"`
+	Thread string `xml:"thread,attr,omitempty" json:"thread,omitempty"`
+	File   string `xml:"file,attr,omitempty" json:"file,omitempty"`
+	Link   string `xml:"link,attr,omitempty" json:"link,omitempty"`
 }
 
 // RefThread creates a reference to another thread.
@@ -72,18 +81,18 @@ func RefLink(url string) Ref {
 
 // Comment is a single comment within a thread.
 type Comment struct {
-	ID         string `xml:"id,attr"`
-	Author     string `xml:"author,attr"`
-	Visibility string `xml:"visibility,attr,omitempty"`
-	SyncStatus string `xml:"sync-status,attr,omitempty"`
-	ReplyTo    string `xml:"reply-to,attr,omitempty"`
-	Bodies     []Body `xml:"nota-body"`
+	ID         string `xml:"id,attr" json:"id"`
+	Author     string `xml:"author,attr" json:"author"`
+	Visibility string `xml:"visibility,attr,omitempty" json:"visibility,omitempty"`
+	SyncStatus string `xml:"sync-status,attr,omitempty" json:"syncStatus,omitempty"`
+	ReplyTo    string `xml:"reply-to,attr,omitempty" json:"replyTo,omitempty"`
+	Bodies     []Body `xml:"nota-body" json:"bodies"`
 }
 
 // Body contains comment content with timestamp. Content is wrapped in CDATA.
 type Body struct {
-	Time    string `xml:"time,attr"`
-	Content string `xml:"-"`
+	Time    string `xml:"time,attr" json:"time"`
+	Content string `xml:"-" json:"content"`
 }
 
 // MarshalXML implements custom marshaling with proper XML escaping.
@@ -137,10 +146,13 @@ func NewComment(author, content string) Comment {
 }
 
 // NewLocalID generates a local ID with "l:" prefix and random hex suffix.
+// Uses crypto/rand with fallback to the global PRNG if crypto/rand fails.
 func NewLocalID() string {
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("failed to generate random ID: %v", err))
+		for i := range b {
+			b[i] = byte(mrand.Uint32())
+		}
 	}
 	return "l:" + hex.EncodeToString(b)
 }
