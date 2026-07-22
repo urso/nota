@@ -14,7 +14,7 @@ import (
 	"github.com/urso/nota/pkg/formatter"
 	"github.com/urso/nota/pkg/git"
 	"github.com/urso/nota/pkg/grouper"
-	"github.com/urso/nota/pkg/tracking"
+	"github.com/urso/nota/pkg/thread"
 )
 
 // CLI is the root command structure for nota.
@@ -24,10 +24,8 @@ type CLI struct {
 	Sync     SyncCmd     `cmd:"" help:"GitHub sync"`
 	Trace    TraceCmd    `cmd:"" help:"Update anchor positions to HEAD"`
 	Init     InitCmd     `cmd:"" help:"Create .nota/ directory"`
-	Validate ValidateCmd `cmd:"" help:"Validate a tracking file"`
+	Validate ValidateCmd `cmd:"" help:"Validate thread files"`
 	Behavior BehaviorCmd `cmd:"" help:"Show tag behaviors"`
-	Find     FindCmd     `cmd:"" help:"Query tracking files"`
-	Read     ReadCmd     `cmd:"" help:"Read a tracking file"`
 }
 
 // InitCmd creates the .nota/ directory.
@@ -79,73 +77,54 @@ func (c *BehaviorCmd) Run() error {
 	return nil
 }
 
-// FindCmd queries tracking files.
-type FindCmd struct {
-	Name         string `arg:"" optional:"" help:"Name to search for"`
-	Status       string `help:"Filter by status (open or resolved)"`
-	Tag          string `help:"Filter by tag"`
-	RefsOf       string `help:"List files that <name> references" name:"refs-of"`
-	DepsOf       string `help:"List files that <name> depends on" name:"deps-of"`
-	ReferencedBy string `help:"List files that reference <name>" name:"referenced-by"`
-	BlockedBy    string `help:"List files that depend on <name>" name:"blocked-by"`
-}
-
-func (c *FindCmd) Run() error {
-	root := projectRoot()
-	dir := filepath.Join(root, ".nota")
-
-	opts := tracking.FindOptions{
-		Dir:          dir,
-		Name:         c.Name,
-		Status:       c.Status,
-		Tag:          c.Tag,
-		RefsOf:       c.RefsOf,
-		DepsOf:       c.DepsOf,
-		ReferencedBy: c.ReferencedBy,
-		BlockedBy:    c.BlockedBy,
-	}
-
-	results, err := tracking.Find(opts)
-	if err != nil {
-		return err
-	}
-	for _, r := range results {
-		fmt.Println(r)
-	}
-	return nil
-}
-
-// ValidateCmd validates a tracking file.
+// ValidateCmd validates thread XML files.
 type ValidateCmd struct {
-	File string `arg:"" required:"" help:"Tracking file to validate"`
+	Files []string `arg:"" optional:"" help:"Thread files to validate (default: all .nota/*.xml)"`
 }
 
 func (c *ValidateCmd) Run() error {
-	errs, err := tracking.ValidateFile(c.File)
-	if err != nil {
-		return err
-	}
-	if len(errs) > 0 {
-		fmt.Fprintf(os.Stdout, "Tracking file validation failed for %s:\n", c.File)
-		for _, e := range errs {
-			fmt.Println(e)
+	return c.run(os.Stdout, os.Stderr, projectRoot())
+}
+
+func (c *ValidateCmd) run(stdout, stderr io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
+
+	files := c.Files
+	if len(files) == 0 {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return fmt.Errorf("reading .nota/: %w", err)
 		}
-		return fmt.Errorf("validation failed")
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".xml") {
+				files = append(files, filepath.Join(dir, e.Name()))
+			}
+		}
 	}
-	return nil
-}
 
-// ReadCmd reads a tracking file.
-type ReadCmd struct {
-	File string `arg:"" required:"" help:"Tracking file to read"`
-}
-
-func (c *ReadCmd) Run() error {
-	content, err := tracking.ReadOpen(c.File)
-	if err != nil {
-		return err
+	if len(files) == 0 {
+		fmt.Fprintln(stdout, "No thread files found")
+		return nil
 	}
-	fmt.Print(content)
+
+	var failed []string
+	for _, f := range files {
+		th, err := thread.ReadThread(f)
+		if err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", f, err)
+			failed = append(failed, f)
+			continue
+		}
+		if err := thread.ValidateThread(th); err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", f, err)
+			failed = append(failed, f)
+		}
+	}
+
+	if len(failed) > 0 {
+		return fmt.Errorf("validation failed for %d file(s)", len(failed))
+	}
+	fmt.Fprintf(stdout, "Validated %d thread file(s)\n", len(files))
 	return nil
 }
 
