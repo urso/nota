@@ -3,25 +3,27 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 
-	"github.com/urso/nota/pkg/git"
 	"github.com/urso/nota/pkg/thread"
 )
 
 // ThreadCmd groups thread management commands.
 type ThreadCmd struct {
-	List    ThreadListCmd    `cmd:"" help:"List threads"`
-	Show    ThreadShowCmd    `cmd:"" help:"Show a thread"`
-	Create  ThreadCreateCmd  `cmd:"" help:"Create a new thread"`
-	Resolve ThreadResolveCmd `cmd:"" help:"Mark thread as resolved"`
-	Wontfix ThreadWontfixCmd `cmd:"" help:"Mark thread as wontfix"`
-	Reopen  ThreadReopenCmd  `cmd:"" help:"Reopen a thread"`
-	Goal    ThreadGoalCmd    `cmd:"" help:"Update thread goal"`
+	List     ThreadListCmd     `cmd:"" help:"List threads"`
+	Show     ThreadShowCmd     `cmd:"" help:"Show a thread"`
+	Create   ThreadCreateCmd   `cmd:"" help:"Create a new thread"`
+	Add      ThreadAddCmd      `cmd:"" help:"Add a comment to a thread"`
+	Spawn    ThreadSpawnCmd    `cmd:"" help:"Create a child thread"`
+	Depend   ThreadDependCmd   `cmd:"" help:"Add dependency on other threads"`
+	Undepend ThreadUndependCmd `cmd:"" help:"Remove dependency on other threads"`
+	Resolve  ThreadResolveCmd  `cmd:"" help:"Mark thread as resolved"`
+	Wontfix  ThreadWontfixCmd  `cmd:"" help:"Mark thread as wontfix"`
+	Reopen   ThreadReopenCmd   `cmd:"" help:"Reopen a thread"`
+	Goal     ThreadGoalCmd     `cmd:"" help:"Update thread goal"`
 }
 
 // ThreadListCmd lists threads with optional filters.
@@ -30,15 +32,29 @@ type ThreadListCmd struct {
 	Goal   string `help:"Filter by goal"`
 	Group  string `help:"Filter by group"`
 	Tag    string `help:"Filter by tag"`
+
+	// Relationship queries
+	RefsOf       string `help:"List threads that this thread references" name:"refs-of"`
+	DepsOf       string `help:"List threads that this thread depends on" name:"deps-of"`
+	ReferencedBy string `help:"List threads that reference this thread" name:"referenced-by"`
+	BlockedBy    string `help:"List threads that depend on this thread" name:"blocked-by"`
 }
 
 func (c *ThreadListCmd) Run() error {
-	dir := filepath.Join(projectRoot(), ".nota")
+	return c.run(os.Stdout, projectRoot())
+}
+
+func (c *ThreadListCmd) run(w io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
 	filter := thread.ThreadFilter{
-		Status: c.Status,
-		Goal:   c.Goal,
-		Group:  c.Group,
-		Tag:    c.Tag,
+		Status:       c.Status,
+		Goal:         c.Goal,
+		Group:        c.Group,
+		Tag:          c.Tag,
+		RefsOf:       c.RefsOf,
+		DepsOf:       c.DepsOf,
+		ReferencedBy: c.ReferencedBy,
+		BlockedBy:    c.BlockedBy,
 	}
 
 	threads, err := thread.ListThreads(dir, filter)
@@ -49,7 +65,7 @@ func (c *ThreadListCmd) Run() error {
 	for _, info := range threads {
 		t := info.Thread
 		title := thread.ThreadTitle(t)
-		fmt.Printf("%s\t%s\t%s\t%s\n", t.ID, t.Status, t.Goal, title)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", t.ID, t.Status, t.Goal, title)
 	}
 
 	return nil
@@ -63,7 +79,11 @@ type ThreadShowCmd struct {
 }
 
 func (c *ThreadShowCmd) Run() error {
-	dir := filepath.Join(projectRoot(), ".nota")
+	return c.run(os.Stdout, projectRoot())
+}
+
+func (c *ThreadShowCmd) run(w io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
 
 	info, err := thread.FindThread(dir, c.ID)
 	if err != nil {
@@ -78,48 +98,48 @@ func (c *ThreadShowCmd) Run() error {
 		if err != nil {
 			return err
 		}
-		fmt.Print(string(data))
+		fmt.Fprint(w, string(data))
 		return nil
 	}
 
 	if c.JSON {
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(info.Thread)
 	}
 
-	return renderThread(info.Thread)
+	return renderThreadTo(w, info.Thread)
 }
 
-func renderThread(t *thread.Thread) error {
-	fmt.Printf("# Thread %s\n\n", t.ID)
-	fmt.Printf("Status: %s", t.Status)
+func renderThreadTo(w io.Writer, t *thread.Thread) error {
+	fmt.Fprintf(w, "# Thread %s\n\n", t.ID)
+	fmt.Fprintf(w, "Status: %s", t.Status)
 	if t.Goal != "" {
-		fmt.Printf("  Goal: %s", t.Goal)
+		fmt.Fprintf(w, "  Goal: %s", t.Goal)
 	}
 	if t.Group != "" {
-		fmt.Printf("  Group: %s", t.Group)
+		fmt.Fprintf(w, "  Group: %s", t.Group)
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	if t.Anchor != nil {
-		fmt.Printf("Anchor: %s:%d", t.Anchor.File, t.Anchor.Line)
+		fmt.Fprintf(w, "Anchor: %s:%d", t.Anchor.File, t.Anchor.Line)
 		if t.Anchor.Commit != "" {
-			fmt.Printf(" @ %s", t.Anchor.Commit[:min(7, len(t.Anchor.Commit))])
+			fmt.Fprintf(w, " @ %s", t.Anchor.Commit[:min(7, len(t.Anchor.Commit))])
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	for i, c := range t.Comments {
 		if i > 0 {
-			fmt.Println("---")
+			fmt.Fprintln(w, "---")
 		}
-		fmt.Printf("## %s (%s)\n\n", c.Author, c.ID)
+		fmt.Fprintf(w, "## %s (%s)\n\n", c.Author, c.ID)
 		if len(c.Bodies) > 0 {
 			body := c.Bodies[len(c.Bodies)-1]
-			fmt.Printf("%s\n\n", strings.TrimSpace(body.Content))
+			fmt.Fprintf(w, "%s\n\n", strings.TrimSpace(body.Content))
 		}
 	}
 
@@ -136,101 +156,82 @@ type ThreadCreateCmd struct {
 }
 
 func (c *ThreadCreateCmd) Run() error {
-	if strings.TrimSpace(c.Message) == "" {
-		return fmt.Errorf("message cannot be empty")
-	}
+	return c.run(os.Stdout, projectRoot())
+}
 
-	if c.Goal != "" && !thread.ValidGoal(c.Goal) {
-		return fmt.Errorf("invalid goal %q: must be one of %s", c.Goal, strings.Join(thread.GoalValues, ", "))
-	}
-
-	t := thread.NewThread("open", c.Goal)
-
-	if c.Group != "" {
-		t.Group = c.Group
-	}
-
-	if c.Parent != "" {
-		if err := validateThreadID(c.Parent); err != nil {
-			return fmt.Errorf("invalid parent ID: %w", err)
-		}
-		t.Parent = &thread.Parent{Ref: c.Parent}
-	}
-
-	if c.Anchor != "" {
-		anchor, err := parseAnchor(c.Anchor)
-		if err != nil {
-			return err
-		}
-		t.Anchor = anchor
-	}
-
-	author := git.UserName()
-	comment := thread.NewComment(author, c.Message)
-	t.Comments = append(t.Comments, comment)
-
-	dir := filepath.Join(projectRoot(), ".nota")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("creating .nota/: %w", err)
-	}
-
-	filename := threadFilename(t)
-	path := filepath.Join(dir, filename)
-
-	if err := thread.WriteThread(path, t); err != nil {
+func (c *ThreadCreateCmd) run(w io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
+	t, err := thread.Create(dir, thread.CreateOpts{
+		Message: c.Message,
+		Goal:    c.Goal,
+		Group:   c.Group,
+		Parent:  c.Parent,
+		Anchor:  c.Anchor,
+	})
+	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Created thread %s\n", t.ID)
+	fmt.Fprintf(w, "Created thread %s\n", t.ID)
 	return nil
 }
 
-func parseAnchor(s string) (*thread.Anchor, error) {
-	idx := strings.LastIndexByte(s, ':')
-	if idx == -1 {
-		return nil, fmt.Errorf("invalid anchor format %q: expected file:line", s)
-	}
-
-	file := s[:idx]
-	lineStr := s[idx+1:]
-
-	line, err := strconv.Atoi(lineStr)
-	if err != nil || line < 1 {
-		return nil, fmt.Errorf("invalid anchor format %q: line must be a positive integer", s)
-	}
-
-	if _, err := os.Stat(file); err != nil {
-		return nil, fmt.Errorf("anchor file not found: %s", file)
-	}
-
-	anchor := &thread.Anchor{
-		File: file,
-		Line: line,
-	}
-
-	if commit, err := git.HeadCommit(""); err == nil {
-		anchor.Commit = commit
-	}
-
-	return anchor, nil
+// ThreadAddCmd adds a comment to an existing thread.
+type ThreadAddCmd struct {
+	ID      string `arg:"" required:"" help:"Thread ID"`
+	Message string `arg:"" optional:"" help:"Comment message"`
+	File    string `help:"Read message from file (- for stdin)"`
+	Local   bool   `help:"Set visibility to local"`
+	ReplyTo string `help:"Comment ID to reply to" name:"reply-to"`
+	Anchor  string `help:"Code anchor in file:line format"`
 }
 
-func threadFilename(t *thread.Thread) string {
-	suffix := strings.TrimPrefix(t.ID, "l:")
-	if t.Group != "" {
-		return t.Group + "-" + suffix + ".xml"
-	}
-	return suffix + ".xml"
+func (c *ThreadAddCmd) Run() error {
+	return c.run(os.Stdout, projectRoot())
 }
 
-var localIDPattern = regexp.MustCompile(`^l:[0-9a-f]{16}$`)
-var githubIDPattern = regexp.MustCompile(`^gh:\d+$`)
-
-func validateThreadID(id string) error {
-	if localIDPattern.MatchString(id) || githubIDPattern.MatchString(id) {
-		return nil
+func (c *ThreadAddCmd) run(w io.Writer, root string) error {
+	message, err := c.resolveMessage()
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("invalid thread ID format, expected l:uuid or gh:id")
+
+	dir := filepath.Join(root, ".nota")
+	comment, err := thread.AddComment(dir, c.ID, thread.AddCommentOpts{
+		Message: message,
+		Local:   c.Local,
+		ReplyTo: c.ReplyTo,
+		Anchor:  c.Anchor,
+	})
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(w, "Added comment %s to thread %s\n", comment.ID, c.ID)
+	return nil
+}
+
+func (c *ThreadAddCmd) resolveMessage() (string, error) {
+	switch {
+	case c.Message != "" && c.File != "":
+		return "", fmt.Errorf("cannot specify both message argument and --file")
+	case c.Message != "":
+		return c.Message, nil
+	case c.File == "-":
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", fmt.Errorf("reading stdin: %w", err)
+		}
+		return string(data), nil
+	case c.File != "":
+		data, err := os.ReadFile(c.File)
+		if err != nil {
+			return "", fmt.Errorf("reading file: %w", err)
+		}
+		return string(data), nil
+	default:
+		return "", fmt.Errorf("message cannot be empty")
+	}
 }
 
 // ThreadResolveCmd marks a thread as resolved.
@@ -239,7 +240,16 @@ type ThreadResolveCmd struct {
 }
 
 func (c *ThreadResolveCmd) Run() error {
-	return updateThreadStatus(c.ID, "resolved")
+	return c.run(os.Stdout, projectRoot())
+}
+
+func (c *ThreadResolveCmd) run(w io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
+	if err := thread.UpdateStatus(dir, c.ID, "resolved"); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "Thread %s marked as resolved\n", c.ID)
+	return nil
 }
 
 // ThreadWontfixCmd marks a thread as wontfix.
@@ -248,7 +258,16 @@ type ThreadWontfixCmd struct {
 }
 
 func (c *ThreadWontfixCmd) Run() error {
-	return updateThreadStatus(c.ID, "wontfix")
+	return c.run(os.Stdout, projectRoot())
+}
+
+func (c *ThreadWontfixCmd) run(w io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
+	if err := thread.UpdateStatus(dir, c.ID, "wontfix"); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "Thread %s marked as wontfix\n", c.ID)
+	return nil
 }
 
 // ThreadReopenCmd reopens a thread.
@@ -257,29 +276,15 @@ type ThreadReopenCmd struct {
 }
 
 func (c *ThreadReopenCmd) Run() error {
-	return updateThreadStatus(c.ID, "open")
+	return c.run(os.Stdout, projectRoot())
 }
 
-func updateThreadStatus(id, status string) error {
-	if err := validateThreadID(id); err != nil {
+func (c *ThreadReopenCmd) run(w io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
+	if err := thread.UpdateStatus(dir, c.ID, "open"); err != nil {
 		return err
 	}
-
-	dir := filepath.Join(projectRoot(), ".nota")
-	info, err := thread.FindThread(dir, id)
-	if err != nil {
-		return err
-	}
-	if info == nil {
-		return fmt.Errorf("thread not found: %s", id)
-	}
-
-	info.Thread.Status = status
-	if err := thread.WriteThread(info.Path, info.Thread); err != nil {
-		return err
-	}
-
-	fmt.Printf("Thread %s marked as %s\n", id, status)
+	fmt.Fprintf(w, "Thread %s marked as open\n", c.ID)
 	return nil
 }
 
@@ -290,28 +295,87 @@ type ThreadGoalCmd struct {
 }
 
 func (c *ThreadGoalCmd) Run() error {
-	if err := validateThreadID(c.ID); err != nil {
+	return c.run(os.Stdout, projectRoot())
+}
+
+func (c *ThreadGoalCmd) run(w io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
+	if err := thread.UpdateGoal(dir, c.ID, c.Goal); err != nil {
 		return err
 	}
+	fmt.Fprintf(w, "Thread %s goal set to %s\n", c.ID, c.Goal)
+	return nil
+}
 
-	if !thread.ValidGoal(c.Goal) {
-		return fmt.Errorf("invalid goal %q: must be one of %s", c.Goal, strings.Join(thread.GoalValues, ", "))
-	}
+// ThreadSpawnCmd creates a child thread linked to a parent.
+type ThreadSpawnCmd struct {
+	ParentID string `arg:"" required:"" help:"Parent thread ID"`
+	Message  string `arg:"" required:"" help:"Initial comment message"`
+	Goal     string `help:"Thread goal (review, discuss, impl, etc.)"`
+	Group    string `help:"Thread group name (inherits from parent if not specified)"`
+}
 
-	dir := filepath.Join(projectRoot(), ".nota")
-	info, err := thread.FindThread(dir, c.ID)
+func (c *ThreadSpawnCmd) Run() error {
+	return c.run(os.Stdout, projectRoot())
+}
+
+func (c *ThreadSpawnCmd) run(w io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
+	child, err := thread.Spawn(dir, c.ParentID, thread.SpawnOpts{
+		Message: c.Message,
+		Goal:    c.Goal,
+		Group:   c.Group,
+	})
 	if err != nil {
 		return err
 	}
-	if info == nil {
-		return fmt.Errorf("thread not found: %s", c.ID)
-	}
 
-	info.Thread.Goal = c.Goal
-	if err := thread.WriteThread(info.Path, info.Thread); err != nil {
+	fmt.Fprintf(w, "Created child thread %s (parent: %s)\n", child.ID, c.ParentID)
+	return nil
+}
+
+// ThreadDependCmd adds dependencies to a thread.
+type ThreadDependCmd struct {
+	ID         string   `arg:"" required:"" help:"Thread ID"`
+	BlockerIDs []string `arg:"" required:"" help:"Blocker thread IDs"`
+}
+
+func (c *ThreadDependCmd) Run() error {
+	return c.run(os.Stdout, projectRoot())
+}
+
+func (c *ThreadDependCmd) run(w io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
+	dependsOn, err := thread.AddDependencies(dir, c.ID, c.BlockerIDs)
+	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Thread %s goal set to %s\n", c.ID, c.Goal)
+	fmt.Fprintf(w, "Thread %s now depends on: %s\n", c.ID, dependsOn)
+	return nil
+}
+
+// ThreadUndependCmd removes dependencies from a thread.
+type ThreadUndependCmd struct {
+	ID         string   `arg:"" required:"" help:"Thread ID"`
+	BlockerIDs []string `arg:"" required:"" help:"Blocker thread IDs to remove"`
+}
+
+func (c *ThreadUndependCmd) Run() error {
+	return c.run(os.Stdout, projectRoot())
+}
+
+func (c *ThreadUndependCmd) run(w io.Writer, root string) error {
+	dir := filepath.Join(root, ".nota")
+	dependsOn, err := thread.RemoveDependencies(dir, c.ID, c.BlockerIDs)
+	if err != nil {
+		return err
+	}
+
+	if dependsOn == "" {
+		fmt.Fprintf(w, "Thread %s has no dependencies\n", c.ID)
+	} else {
+		fmt.Fprintf(w, "Thread %s now depends on: %s\n", c.ID, dependsOn)
+	}
 	return nil
 }

@@ -81,12 +81,18 @@ func RefLink(url string) Ref {
 
 // Comment is a single comment within a thread.
 type Comment struct {
-	ID         string `xml:"id,attr" json:"id"`
-	Author     string `xml:"author,attr" json:"author"`
-	Visibility string `xml:"visibility,attr,omitempty" json:"visibility,omitempty"`
-	SyncStatus string `xml:"sync-status,attr,omitempty" json:"syncStatus,omitempty"`
-	ReplyTo    string `xml:"reply-to,attr,omitempty" json:"replyTo,omitempty"`
-	Bodies     []Body `xml:"nota-body" json:"bodies"`
+	ID         string   `xml:"id,attr" json:"id"`
+	Author     string   `xml:"author,attr" json:"author"`
+	Visibility string   `xml:"visibility,attr,omitempty" json:"visibility,omitempty"`
+	SyncStatus string   `xml:"sync-status,attr,omitempty" json:"syncStatus,omitempty"`
+	Anchor     *Anchor  `xml:"nota-anchor,omitempty" json:"anchor,omitempty"`
+	ReplyTo    *ReplyTo `xml:"nota-reply-to,omitempty" json:"replyTo,omitempty"`
+	Bodies     []Body   `xml:"nota-body" json:"bodies"`
+}
+
+// ReplyTo references another comment this comment is replying to.
+type ReplyTo struct {
+	Ref string `xml:"ref,attr" json:"ref"`
 }
 
 // Body contains comment content with timestamp. Content is wrapped in CDATA.

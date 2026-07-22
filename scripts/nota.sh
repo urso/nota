@@ -56,6 +56,14 @@ case "$subcommand" in
   extract)
     exec "$bin" extract --dir "$root/.nota" "$@"
     ;;
+  local)
+    # nota local list/extract/delete
+    exec "$bin" local "$@"
+    ;;
+  thread)
+    # nota thread list/show/create/add/resolve/...
+    exec "$bin" thread "$@"
+    ;;
   list|delete)
     exec "$bin" "$subcommand" "$@"
     ;;

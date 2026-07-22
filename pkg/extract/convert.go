@@ -41,7 +41,7 @@ func groupToThread(g grouper.Group, commit string, fileLines map[string][][]byte
 			t.Goal = string(e.Tag)
 		}
 
-		anchor := thread.Anchor{
+		anchor := &thread.Anchor{
 			File:        e.File,
 			Line:        e.Line,
 			Commit:      commit,
@@ -56,6 +56,7 @@ func groupToThread(g grouper.Group, commit string, fileLines map[string][][]byte
 		c := thread.Comment{
 			ID:     thread.NewLocalID(),
 			Author: "user",
+			Anchor: anchor,
 			Bodies: []thread.Body{{
 				Time:    now,
 				Content: content,
@@ -63,7 +64,7 @@ func groupToThread(g grouper.Group, commit string, fileLines map[string][][]byte
 		}
 
 		if i == 0 {
-			t.Anchor = &anchor
+			t.Anchor = anchor
 		}
 
 		t.Comments = append(t.Comments, c)

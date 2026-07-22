@@ -16,18 +16,20 @@ The developer is the reviewer. Respond to their code review comments following a
 
 If no comments found, skip to Step 2.
 
-## Step 2: Read open reviews
+## Step 2: Read open threads
 
 ```
 !`bash ${CLAUDE_PLUGIN_ROOT}/scripts/list-open.sh`
 ```
 
-If no files listed, report no open reviews and stop.
+If no threads listed, report no open reviews and stop.
 
-For each listed file, read open sections:
+The output is tab-separated: `ID STATUS GOAL TITLE`
+
+For each thread, read its contents:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/read-open.sh <file>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/read-open.sh <thread-id>
 ```
 
 ## Step 3: Load tag behaviors and triage
@@ -36,9 +38,9 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/read-open.sh <file>
 !`bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh behavior 2>&1`
 ```
 
-Follow the behavior description for each tag when addressing items. Present a summary:
-- Item count by tag type, grouped by theme/file
-- Dependency relationships (check `depends-on` in frontmatter)
+Follow the behavior description for each goal when addressing items. Present a summary:
+- Item count by goal type, grouped by theme/group
+- Dependency relationships (threads with `depends-on`)
 - Suggested order (items with unsatisfied dependencies should be addressed later)
 - Ask whether to address all or focus on specific items
 
@@ -46,20 +48,18 @@ $ARGUMENTS
 
 ## Step 4: Gather context and address each item
 
-Before addressing an item, check if the tracking file has `references` or `depends-on` in its frontmatter. If so, read the referenced files to gather context — these may include resolved reviews with relevant decisions or discussions.
+Before addressing a thread, check if it has references or dependencies. If so, read those threads for context — they may include resolved discussions with relevant decisions.
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/find-review.sh --refs-of <name>
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/find-review.sh --deps-of <name>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/find-review.sh --refs-of <thread-id>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/find-review.sh --deps-of <thread-id>
 ```
 
-Where `<name>` is the filename stem (e.g. `auth` for `.nota/auth.md`).
-
-For each item:
-1. Read referenced/dependent tracking files for context
-2. Read the relevant source code
-3. Follow the tag's behavior — fix, discuss, explain, implement, etc.
-4. For tags requiring agreement, do NOT change code until the developer confirms
+For each thread:
+1. Read referenced/dependent threads for context
+2. Read the relevant source code (check thread anchor for file:line)
+3. Follow the goal's behavior — fix, discuss, explain, implement, etc.
+4. For goals requiring agreement, do NOT change code until the developer confirms
 
 ### Convergence loop
 
@@ -70,11 +70,26 @@ To leave an annotation:
 - Use `discuss(name):` for questions/clarifications or `propose(name):` for suggesting alternatives
 - Reuse the same group name as the original annotation to keep the conversation linked
 
+### Responding to threads
+
+Add your response as a comment to the thread:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/thread-add.sh <thread-id> "Your response message"
+```
+
+For longer responses, pipe from stdin:
+
+```bash
+echo "Your response" | bash ${CLAUDE_PLUGIN_ROOT}/scripts/thread-add.sh <thread-id> --file=-
+```
+
 ## Step 5: Resolution
 
 After user confirmation on an item:
-1. Prepend `[resolved]` or `[wontfix]` to the section heading in the tracking file
-2. Add a brief response (e.g. `> Fixed: changed <= to < in validateToken()`)
-3. When all sections in a file are resolved, set frontmatter `status: resolved`
 
-Never mark an item resolved without user confirmation.
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/thread-resolve.sh <thread-id>
+```
+
+Never mark a thread resolved without user confirmation.

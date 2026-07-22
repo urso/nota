@@ -1,8 +1,8 @@
 #!/bin/bash
-# Lists .nota/*.md files that have status: open in frontmatter.
-# Thin wrapper around `nota find --status open`.
+# Lists open threads from .nota/*.xml files.
+# Thin wrapper around `nota thread list --status=open`.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-exec bash "$SCRIPT_DIR/nota.sh" find --status open "$@"
+exec bash "$SCRIPT_DIR/nota.sh" thread list --status=open "$@"

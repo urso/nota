@@ -76,6 +76,143 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRoundTripPerCommentAnchors(t *testing.T) {
+	th := &Thread{
+		ID:     "l:test456",
+		Status: "open",
+		Goal:   "review",
+		Anchor: &Anchor{
+			File:   "main.go",
+			Line:   10,
+			Commit: "abc123",
+		},
+		Comments: []Comment{
+			{
+				ID:     "l:c1",
+				Author: "user",
+				Anchor: &Anchor{
+					File:        "handlers/auth.go",
+					Line:        42,
+					Commit:      "abc123",
+					ContentHash: "a1b2c3d4",
+				},
+				Bodies: []Body{
+					{Time: "2026-07-16T10:30:00Z", Content: "First comment with anchor"},
+				},
+			},
+			{
+				ID:     "l:c2",
+				Author: "user",
+				Bodies: []Body{
+					{Time: "2026-07-16T10:35:00Z", Content: "Second comment without anchor"},
+				},
+			},
+			{
+				ID:     "l:c3",
+				Author: "user",
+				Anchor: &Anchor{
+					File:        "handlers/auth.go",
+					Line:        78,
+					Commit:      "abc123",
+					ContentHash: "e5f6g7h8",
+				},
+				Bodies: []Body{
+					{Time: "2026-07-16T10:40:00Z", Content: "Third comment with different anchor"},
+				},
+			},
+		},
+	}
+
+	data1, err := MarshalThread(th)
+	if err != nil {
+		t.Fatalf("first marshal failed: %v", err)
+	}
+
+	th2, err := UnmarshalThread(data1, "test.xml")
+	if err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	data2, err := MarshalThread(th2)
+	if err != nil {
+		t.Fatalf("second marshal failed: %v", err)
+	}
+
+	if string(data1) != string(data2) {
+		t.Errorf("round-trip mismatch:\n--- first ---\n%s\n--- second ---\n%s", data1, data2)
+	}
+
+	// Verify anchors were preserved
+	if th2.Anchor == nil || th2.Anchor.File != "main.go" {
+		t.Error("thread-level anchor not preserved")
+	}
+	if th2.Comments[0].Anchor == nil || th2.Comments[0].Anchor.Line != 42 {
+		t.Error("first comment anchor not preserved")
+	}
+	if th2.Comments[1].Anchor != nil {
+		t.Error("second comment should have no anchor")
+	}
+	if th2.Comments[2].Anchor == nil || th2.Comments[2].Anchor.Line != 78 {
+		t.Error("third comment anchor not preserved")
+	}
+}
+
+func TestRoundTripReplyTo(t *testing.T) {
+	th := &Thread{
+		ID:     "l:replytest",
+		Status: "open",
+		Comments: []Comment{
+			{
+				ID:     "l:c1",
+				Author: "alice",
+				Bodies: []Body{{Time: "2026-07-16T10:00:00Z", Content: "Original"}},
+			},
+			{
+				ID:      "l:c2",
+				Author:  "bob",
+				ReplyTo: &ReplyTo{Ref: "l:c1"},
+				Bodies:  []Body{{Time: "2026-07-16T10:05:00Z", Content: "Reply to alice"}},
+			},
+		},
+	}
+
+	data1, err := MarshalThread(th)
+	if err != nil {
+		t.Fatalf("first marshal failed: %v", err)
+	}
+
+	// Verify XML contains nota-reply-to element, not attribute
+	xml := string(data1)
+	if !strings.Contains(xml, `<nota-reply-to ref="l:c1"></nota-reply-to>`) {
+		t.Errorf("expected <nota-reply-to ref=...> element in XML:\n%s", xml)
+	}
+	if strings.Contains(xml, `reply-to="l:c1"`) {
+		t.Errorf("should not have reply-to attribute in XML:\n%s", xml)
+	}
+
+	th2, err := UnmarshalThread(data1, "test.xml")
+	if err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	data2, err := MarshalThread(th2)
+	if err != nil {
+		t.Fatalf("second marshal failed: %v", err)
+	}
+
+	if string(data1) != string(data2) {
+		t.Errorf("round-trip mismatch:\n--- first ---\n%s\n--- second ---\n%s", data1, data2)
+	}
+
+	// Verify ReplyTo preserved
+	if th2.Comments[0].ReplyTo != nil {
+		t.Error("first comment should have no reply-to")
+	}
+	if th2.Comments[1].ReplyTo == nil || th2.Comments[1].ReplyTo.Ref != "l:c1" {
+		t.Errorf("reply-to not preserved: %v", th2.Comments[1].ReplyTo)
+	}
+}
+
 func TestRoundTripSpecialChars(t *testing.T) {
 	content := `Check token expiry.
 

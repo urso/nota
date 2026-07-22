@@ -3,6 +3,7 @@ package thread
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -79,7 +80,7 @@ func TestListThreadsNonExistentDir(t *testing.T) {
 	}
 }
 
-func TestListThreadsSkipsMalformedXML(t *testing.T) {
+func TestListThreadsErrorsOnMalformedXML(t *testing.T) {
 	dir := t.TempDir()
 
 	// Write a valid thread
@@ -101,15 +102,12 @@ func TestListThreadsSkipsMalformedXML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := ListThreads(dir, ThreadFilter{})
-	if err != nil {
-		t.Fatalf("ListThreads failed: %v", err)
+	_, err := ListThreads(dir, ThreadFilter{})
+	if err == nil {
+		t.Fatal("expected error for malformed XML, got nil")
 	}
-	if len(results) != 1 {
-		t.Errorf("expected 1 valid thread, got %d", len(results))
-	}
-	if len(results) == 1 && results[0].Thread.ID != th.ID {
-		t.Errorf("expected thread ID %s, got %s", th.ID, results[0].Thread.ID)
+	if !strings.Contains(err.Error(), "invalid.xml") {
+		t.Errorf("error should mention the malformed file: %v", err)
 	}
 }
 
