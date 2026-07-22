@@ -64,7 +64,7 @@ func groupToThread(g grouper.Group, commit string, fileLines map[string][][]byte
 		}
 
 		if i == 0 {
-			t.Anchor = anchor
+			t.AppendAnchor(*anchor)
 		}
 
 		t.Comments = append(t.Comments, c)

@@ -125,7 +125,7 @@ func Create(dir string, opts CreateOpts) (*Thread, error) {
 		if err != nil {
 			return nil, err
 		}
-		t.Anchor = anchor
+		t.AppendAnchor(*anchor)
 	}
 
 	author := opts.Author

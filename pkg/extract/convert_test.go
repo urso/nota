@@ -42,19 +42,20 @@ func TestGroupToThread(t *testing.T) {
 		t.Errorf("expected ID to start with 'l:', got %q", th.ID)
 	}
 
-	if th.Anchor == nil {
+	anchor := th.CurrentAnchor()
+	if anchor == nil {
 		t.Fatal("expected anchor to be set")
 	}
-	if th.Anchor.File != "auth.go" {
-		t.Errorf("expected anchor file 'auth.go', got %q", th.Anchor.File)
+	if anchor.File != "auth.go" {
+		t.Errorf("expected anchor file 'auth.go', got %q", anchor.File)
 	}
-	if th.Anchor.Line != 3 {
-		t.Errorf("expected anchor line 3, got %d", th.Anchor.Line)
+	if anchor.Line != 3 {
+		t.Errorf("expected anchor line 3, got %d", anchor.Line)
 	}
-	if th.Anchor.Commit != "abc123" {
-		t.Errorf("expected anchor commit 'abc123', got %q", th.Anchor.Commit)
+	if anchor.Commit != "abc123" {
+		t.Errorf("expected anchor commit 'abc123', got %q", anchor.Commit)
 	}
-	if th.Anchor.ContentHash == "" {
+	if anchor.ContentHash == "" {
 		t.Error("expected content hash to be set")
 	}
 
@@ -93,8 +94,8 @@ func TestGroupToThreadMultipleEntries(t *testing.T) {
 	}
 
 	// Thread anchor from first entry.
-	if th.Anchor.Line != 1 {
-		t.Errorf("expected anchor line 1, got %d", th.Anchor.Line)
+	if th.CurrentAnchor().Line != 1 {
+		t.Errorf("expected anchor line 1, got %d", th.CurrentAnchor().Line)
 	}
 }
 

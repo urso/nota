@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/urso/nota/pkg/git"
 	"github.com/urso/nota/pkg/thread"
+	"github.com/urso/nota/pkg/trace"
 )
 
 // ThreadCmd groups thread management commands.
@@ -93,6 +95,16 @@ func (c *ThreadShowCmd) run(w io.Writer, root string) error {
 		return fmt.Errorf("thread not found: %s", c.ID)
 	}
 
+	// Trace anchors to HEAD before display (unless --raw)
+	if !c.Raw {
+		if updated := traceThreadAnchors(root, info.Thread); updated {
+			if err := thread.WriteThread(info.Path, info.Thread); err != nil {
+				// Non-fatal: log but continue showing
+				fmt.Fprintf(os.Stderr, "warning: failed to save traced anchors: %v\n", err)
+			}
+		}
+	}
+
 	if c.Raw {
 		data, err := os.ReadFile(info.Path)
 		if err != nil {
@@ -111,6 +123,44 @@ func (c *ThreadShowCmd) run(w io.Writer, root string) error {
 	return renderThreadTo(w, info.Thread)
 }
 
+// traceThreadAnchors traces all anchors in a thread to HEAD, using backtracking
+// when the current anchor's commit is not an ancestor of HEAD (revert case).
+// Returns true if any anchors were updated.
+func traceThreadAnchors(root string, t *thread.Thread) bool {
+	head, err := git.HeadCommit(root)
+	if err != nil {
+		return false
+	}
+
+	updated := false
+
+	// Trace thread-level anchors with backtracking support
+	if len(t.Anchors) > 0 {
+		current := t.CurrentAnchor()
+		if current.Commit != "" && current.Commit != head && !current.Outdated {
+			result, err := trace.TraceWithBacktrack(root, t.Anchors, head)
+			if err == nil {
+				t.AppendAnchor(result.Anchor)
+				updated = true
+			}
+		}
+	}
+
+	// Trace comment-level anchors (no history, so use direct trace)
+	for i := range t.Comments {
+		c := &t.Comments[i]
+		if c.Anchor != nil && c.Anchor.Commit != "" && c.Anchor.Commit != head && !c.Anchor.Outdated {
+			result, err := trace.TraceAnchor(root, *c.Anchor, head)
+			if err == nil {
+				c.Anchor = &result.Anchor
+				updated = true
+			}
+		}
+	}
+
+	return updated
+}
+
 func renderThreadTo(w io.Writer, t *thread.Thread) error {
 	fmt.Fprintf(w, "# Thread %s\n\n", t.ID)
 	fmt.Fprintf(w, "Status: %s", t.Status)
@@ -122,10 +172,13 @@ func renderThreadTo(w io.Writer, t *thread.Thread) error {
 	}
 	fmt.Fprintln(w)
 
-	if t.Anchor != nil {
-		fmt.Fprintf(w, "Anchor: %s:%d", t.Anchor.File, t.Anchor.Line)
-		if t.Anchor.Commit != "" {
-			fmt.Fprintf(w, " @ %s", t.Anchor.Commit[:min(7, len(t.Anchor.Commit))])
+	if anchor := t.CurrentAnchor(); anchor != nil {
+		fmt.Fprintf(w, "Anchor: %s:%d", anchor.File, anchor.Line)
+		if anchor.Commit != "" {
+			fmt.Fprintf(w, " @ %s", anchor.Commit[:min(7, len(anchor.Commit))])
+		}
+		if anchor.Outdated {
+			fmt.Fprintf(w, " [outdated]")
 		}
 		fmt.Fprintln(w)
 	}

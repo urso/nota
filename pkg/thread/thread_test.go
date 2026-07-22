@@ -16,11 +16,13 @@ func TestRoundTrip(t *testing.T) {
 		Group:     "pr-487",
 		Tags:      "auth,security",
 		DependsOn: "",
-		Anchor: &Anchor{
-			File:        "handlers/auth.go",
-			Line:        42,
-			Commit:      "abc123",
-			ContentHash: "a1b2c3d4",
+		Anchors: []Anchor{
+			{
+				File:        "handlers/auth.go",
+				Line:        42,
+				Commit:      "abc123",
+				ContentHash: "a1b2c3d4",
+			},
 		},
 		Sync: &SyncConfig{
 			Provider: "github",
@@ -81,10 +83,12 @@ func TestRoundTripPerCommentAnchors(t *testing.T) {
 		ID:     "l:test456",
 		Status: "open",
 		Goal:   "review",
-		Anchor: &Anchor{
-			File:   "main.go",
-			Line:   10,
-			Commit: "abc123",
+		Anchors: []Anchor{
+			{
+				File:   "main.go",
+				Line:   10,
+				Commit: "abc123",
+			},
 		},
 		Comments: []Comment{
 			{
@@ -143,7 +147,7 @@ func TestRoundTripPerCommentAnchors(t *testing.T) {
 	}
 
 	// Verify anchors were preserved
-	if th2.Anchor == nil || th2.Anchor.File != "main.go" {
+	if th2.CurrentAnchor() == nil || th2.CurrentAnchor().File != "main.go" {
 		t.Error("thread-level anchor not preserved")
 	}
 	if th2.Comments[0].Anchor == nil || th2.Comments[0].Anchor.Line != 42 {

@@ -22,6 +22,7 @@ type CLI struct {
 	Local    LocalCmd    `cmd:"" help:"Source file operations"`
 	Thread   ThreadCmd   `cmd:"" help:"Thread management"`
 	Sync     SyncCmd     `cmd:"" help:"GitHub sync"`
+	Trace    TraceCmd    `cmd:"" help:"Update anchor positions to HEAD"`
 	Init     InitCmd     `cmd:"" help:"Create .nota/ directory"`
 	Validate ValidateCmd `cmd:"" help:"Validate a tracking file"`
 	Behavior BehaviorCmd `cmd:"" help:"Show tag behaviors"`
@@ -245,6 +246,7 @@ func walkFiles(root string) iter.Seq[string] {
 	return func(yield func(string) bool) {
 		filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", path, err)
 				return nil
 			}
 			if info.IsDir() {

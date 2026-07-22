@@ -18,7 +18,7 @@ func ValidGoal(goal string) bool {
 	return slices.Contains(GoalValues, goal)
 }
 
-// Thread represents a conversation thread with optional code anchor and sync state.
+// Thread represents a conversation thread with optional code anchors and sync state.
 type Thread struct {
 	XMLName   xml.Name    `xml:"nota-thread" json:"-"`
 	ID        string      `xml:"id,attr,omitempty" json:"id,omitempty"`
@@ -27,11 +27,24 @@ type Thread struct {
 	Group     string      `xml:"group,attr,omitempty" json:"group,omitempty"`
 	Tags      string      `xml:"tags,attr,omitempty" json:"tags,omitempty"`
 	DependsOn string      `xml:"depends-on,attr,omitempty" json:"dependsOn,omitempty"`
-	Anchor    *Anchor     `xml:"nota-anchor,omitempty" json:"anchor,omitempty"`
+	Anchors   []Anchor    `xml:"nota-anchor,omitempty" json:"anchors,omitempty"`
 	Sync      *SyncConfig `xml:"nota-sync,omitempty" json:"sync,omitempty"`
 	Parent    *Parent     `xml:"nota-parent,omitempty" json:"parent,omitempty"`
 	Refs      []Ref       `xml:"nota-ref,omitempty" json:"refs,omitempty"`
 	Comments  []Comment   `xml:"nota-comment" json:"comments"`
+}
+
+// CurrentAnchor returns the latest anchor, or nil if no anchors exist.
+func (t *Thread) CurrentAnchor() *Anchor {
+	if len(t.Anchors) == 0 {
+		return nil
+	}
+	return &t.Anchors[len(t.Anchors)-1]
+}
+
+// AppendAnchor adds a new anchor to the thread's anchor history.
+func (t *Thread) AppendAnchor(a Anchor) {
+	t.Anchors = append(t.Anchors, a)
 }
 
 // Parent references a parent thread.
@@ -39,14 +52,15 @@ type Parent struct {
 	Ref string `xml:"ref,attr" json:"ref"`
 }
 
-// Anchor represents a code location reference.
+// Anchor represents a code location reference at a specific commit.
+// Anchors are append-only; each trace adds a new anchor with TracedFrom linking to the source.
 type Anchor struct {
-	File           string `xml:"file,attr" json:"file"`
-	Line           int    `xml:"line,attr" json:"line"`
-	Commit         string `xml:"commit,attr,omitempty" json:"commit,omitempty"`
-	ContentHash    string `xml:"content-hash,attr,omitempty" json:"contentHash,omitempty"`
-	TracedToCommit string `xml:"traced-to-commit,attr,omitempty" json:"tracedToCommit,omitempty"`
-	Outdated       bool   `xml:"outdated,attr,omitempty" json:"outdated,omitempty"`
+	File        string `xml:"file,attr" json:"file"`
+	Line        int    `xml:"line,attr" json:"line"`
+	Commit      string `xml:"commit,attr,omitempty" json:"commit,omitempty"`
+	ContentHash string `xml:"content-hash,attr,omitempty" json:"contentHash,omitempty"`
+	TracedFrom  string `xml:"traced-from,attr,omitempty" json:"tracedFrom,omitempty"`
+	Outdated    bool   `xml:"outdated,attr,omitempty" json:"outdated,omitempty"`
 }
 
 // SyncConfig holds external sync configuration for a thread.

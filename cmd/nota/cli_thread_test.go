@@ -144,7 +144,7 @@ func TestThreadShowCmd(t *testing.T) {
 		Status: "open",
 		Goal:   "review",
 		Group:  "test-group",
-		Anchor: &thread.Anchor{File: "main.go", Line: 42, Commit: "abc123def456"},
+		Anchors: []thread.Anchor{{File: "main.go", Line: 42, Commit: "abc123def456"}},
 		Comments: []thread.Comment{{
 			ID: "l:c001c001c001c001", Author: "alice",
 			Bodies: []thread.Body{{Time: "2026-07-21T10:00:00Z", Content: "Check this function"}},
@@ -689,12 +689,17 @@ func TestThreadSpawnCmd(t *testing.T) {
 		// Find child thread and verify group
 		notaDir := filepath.Join(dir, ".nota")
 		infos, _ := thread.ListThreads(notaDir, thread.ThreadFilter{})
+		found := false
 		for _, info := range infos {
 			if info.Thread.Parent != nil && info.Thread.Parent.Ref == parent.ID {
+				found = true
 				if info.Thread.Group != "inherited-group" {
 					t.Errorf("child group = %s, want inherited-group", info.Thread.Group)
 				}
 			}
+		}
+		if !found {
+			t.Fatal("child thread with parent reference not found")
 		}
 	})
 
