@@ -65,6 +65,10 @@ func ValidateThread(t *Thread) error {
 		errs = append(errs, fmt.Sprintf("invalid status %q: must be open, resolved, or wontfix", t.Status))
 	}
 
+	if t.Goal != "" && !ValidGoal(t.Goal) {
+		errs = append(errs, fmt.Sprintf("invalid goal %q: must be one of %v", t.Goal, GoalValues))
+	}
+
 	if len(t.Comments) == 0 {
 		errs = append(errs, "thread must have at least one comment")
 	}

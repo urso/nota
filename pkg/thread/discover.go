@@ -5,6 +5,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -124,33 +125,35 @@ func listRelatedFrom(dir string, filter ThreadFilter) ([]ThreadInfo, error) {
 	return results, nil
 }
 
-// FindThread finds a thread by ID in the given directory.
+// FindThread finds a thread by ID or number in the given directory.
+// Accepts: full ID ("l:abc123..."), ID suffix ("abc123..."), or number ("16", "016").
 // Returns nil if not found.
-func FindThread(dir, id string) (*ThreadInfo, error) {
-	// Extract the ID suffix (strip "l:" prefix if present)
-	suffix := id
-	if strings.HasPrefix(id, "l:") {
-		suffix = id[2:]
+func FindThread(dir, query string) (*ThreadInfo, error) {
+	// Check if query is a number
+	var num int
+	var isNum bool
+	if n, err := strconv.Atoi(strings.TrimLeft(query, "0")); err == nil && n > 0 {
+		num = n
+		isNum = true
 	}
 
-	// Glob for files ending with the ID suffix
-	pattern := filepath.Join(dir, "*"+suffix+".xml")
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("glob pattern %s: %w", pattern, err)
+	// Normalize ID query (add "l:" prefix if missing)
+	idQuery := query
+	if !isNum && !strings.HasPrefix(query, "l:") && !strings.HasPrefix(query, "gh:") {
+		idQuery = "l:" + query
 	}
 
-	// Parse matching files and return the first exact ID match
-	for _, path := range matches {
-		t, err := ReadThread(path)
+	for info, err := range AllThreads(dir) {
 		if err != nil {
-			continue
+			return nil, err
 		}
-		if t.ID == id {
-			return &ThreadInfo{Thread: t, Path: path}, nil
+		if isNum && info.Thread.Number == num {
+			return &info, nil
+		}
+		if !isNum && info.Thread.ID == idQuery {
+			return &info, nil
 		}
 	}
-
 	return nil, nil
 }
 
@@ -192,6 +195,21 @@ func ThreadTitle(t *Thread) string {
 		content = content[:57] + "..."
 	}
 	return content
+}
+
+// NextNumber returns the next available thread number for the directory.
+// Scans all existing threads and returns max(number) + 1, or 1 if empty.
+func NextNumber(dir string) (int, error) {
+	maxNum := 0
+	for info, err := range AllThreads(dir) {
+		if err != nil {
+			return 0, err
+		}
+		if info.Thread.Number > maxNum {
+			maxNum = info.Thread.Number
+		}
+	}
+	return maxNum + 1, nil
 }
 
 // AllThreads returns an iterator over all threads in dir.

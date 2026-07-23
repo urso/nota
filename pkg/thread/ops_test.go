@@ -43,13 +43,18 @@ func TestFilename(t *testing.T) {
 	}{
 		{
 			name: "without group",
-			th:   &Thread{ID: "l:0123456789abcdef"},
-			want: "0123456789abcdef.xml",
+			th:   &Thread{ID: "l:0123456789abcdef", Number: 1},
+			want: "001-0123456789abcdef.xml",
 		},
 		{
 			name: "with group",
-			th:   &Thread{ID: "l:0123456789abcdef", Group: "pr-123"},
-			want: "pr-123-0123456789abcdef.xml",
+			th:   &Thread{ID: "l:0123456789abcdef", Number: 42, Group: "pr-123"},
+			want: "pr-123-042-0123456789abcdef.xml",
+		},
+		{
+			name: "three digit number",
+			th:   &Thread{ID: "l:0123456789abcdef", Number: 123},
+			want: "123-0123456789abcdef.xml",
 		},
 	}
 

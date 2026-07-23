@@ -22,6 +22,7 @@ func ValidGoal(goal string) bool {
 type Thread struct {
 	XMLName   xml.Name    `xml:"nota-thread" json:"-"`
 	ID        string      `xml:"id,attr,omitempty" json:"id,omitempty"`
+	Number    int         `xml:"number,attr,omitempty" json:"number,omitempty"`
 	Status    string      `xml:"status,attr" json:"status"`
 	Goal      string      `xml:"goal,attr,omitempty" json:"goal,omitempty"`
 	Group     string      `xml:"group,attr,omitempty" json:"group,omitempty"`

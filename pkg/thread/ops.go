@@ -38,6 +38,7 @@ func lockThread(dir, threadID string) (unlock func() error, err error) {
 
 var localIDPattern = regexp.MustCompile(`^l:[0-9a-f]{16}$`)
 var githubIDPattern = regexp.MustCompile(`^gh:\d+$`)
+var numberPattern = regexp.MustCompile(`^[0-9]+$`)
 
 // ValidateID checks if a thread or comment ID has a valid format.
 func ValidateID(id string) error {
@@ -47,13 +48,23 @@ func ValidateID(id string) error {
 	return fmt.Errorf("invalid thread ID format, expected l:uuid or gh:id")
 }
 
-// Filename returns the filename for a thread based on its ID and group.
-func Filename(t *Thread) string {
-	suffix := strings.TrimPrefix(t.ID, "l:")
-	if t.Group != "" {
-		return t.Group + "-" + suffix + ".xml"
+// ValidateThreadQuery checks if a query is a valid thread ID or number.
+func ValidateThreadQuery(query string) error {
+	if localIDPattern.MatchString(query) || githubIDPattern.MatchString(query) || numberPattern.MatchString(query) {
+		return nil
 	}
-	return suffix + ".xml"
+	return fmt.Errorf("invalid thread query format, expected l:uuid, gh:id, or number")
+}
+
+// Filename returns the filename for a thread based on its number, ID, and group.
+// Format: [group-]<number>-<id>.xml
+func Filename(t *Thread) string {
+	idSuffix := strings.TrimPrefix(t.ID, "l:")
+	numStr := fmt.Sprintf("%03d", t.Number)
+	if t.Group != "" {
+		return fmt.Sprintf("%s-%s-%s.xml", t.Group, numStr, idSuffix)
+	}
+	return fmt.Sprintf("%s-%s.xml", numStr, idSuffix)
 }
 
 // ParseAnchor parses a "file:line" string into an Anchor.
@@ -113,7 +124,17 @@ func Create(dir string, opts CreateOpts) (*Thread, error) {
 		}
 	}
 
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("creating directory: %w", err)
+	}
+
+	num, err := NextNumber(dir)
+	if err != nil {
+		return nil, fmt.Errorf("getting next thread number: %w", err)
+	}
+
 	t := NewThread("open", opts.Goal)
+	t.Number = num
 	t.Group = opts.Group
 
 	if opts.Parent != "" {
@@ -135,10 +156,6 @@ func Create(dir string, opts CreateOpts) (*Thread, error) {
 	comment := NewComment(author, opts.Message)
 	t.Comments = append(t.Comments, comment)
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("creating directory: %w", err)
-	}
-
 	path := filepath.Join(dir, Filename(t))
 	if err := WriteThread(path, t); err != nil {
 		return nil, err
@@ -158,7 +175,7 @@ type AddCommentOpts struct {
 
 // AddComment adds a comment to an existing thread.
 func AddComment(dir, threadID string, opts AddCommentOpts) (*Comment, error) {
-	if err := ValidateID(threadID); err != nil {
+	if err := ValidateThreadQuery(threadID); err != nil {
 		return nil, err
 	}
 
@@ -217,7 +234,7 @@ func AddComment(dir, threadID string, opts AddCommentOpts) (*Comment, error) {
 
 // UpdateStatus updates a thread's status.
 func UpdateStatus(dir, threadID, status string) error {
-	if err := ValidateID(threadID); err != nil {
+	if err := ValidateThreadQuery(threadID); err != nil {
 		return err
 	}
 
@@ -242,7 +259,7 @@ func UpdateStatus(dir, threadID, status string) error {
 
 // UpdateGoal updates a thread's goal.
 func UpdateGoal(dir, threadID, goal string) error {
-	if err := ValidateID(threadID); err != nil {
+	if err := ValidateThreadQuery(threadID); err != nil {
 		return err
 	}
 
@@ -306,7 +323,17 @@ func Spawn(dir, parentID string, opts SpawnOpts) (*Thread, error) {
 		return nil, fmt.Errorf("thread not found: %s", parentID)
 	}
 
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("creating directory: %w", err)
+	}
+
+	num, err := NextNumber(dir)
+	if err != nil {
+		return nil, fmt.Errorf("getting next thread number: %w", err)
+	}
+
 	child := NewThread("open", opts.Goal)
+	child.Number = num
 	child.Parent = &Parent{Ref: parentID}
 
 	if opts.Group != "" {
@@ -322,10 +349,6 @@ func Spawn(dir, parentID string, opts SpawnOpts) (*Thread, error) {
 	comment := NewComment(author, opts.Message)
 	child.Comments = append(child.Comments, comment)
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("creating directory: %w", err)
-	}
-
 	path := filepath.Join(dir, Filename(child))
 	if err := WriteThread(path, child); err != nil {
 		return nil, err
@@ -336,7 +359,7 @@ func Spawn(dir, parentID string, opts SpawnOpts) (*Thread, error) {
 
 // AddDependencies adds blocker IDs to a thread's depends-on attribute.
 func AddDependencies(dir, threadID string, blockerIDs []string) (string, error) {
-	if err := ValidateID(threadID); err != nil {
+	if err := ValidateThreadQuery(threadID); err != nil {
 		return "", err
 	}
 
@@ -378,7 +401,7 @@ func AddDependencies(dir, threadID string, blockerIDs []string) (string, error) 
 
 // RemoveDependencies removes blocker IDs from a thread's depends-on attribute.
 func RemoveDependencies(dir, threadID string, blockerIDs []string) (string, error) {
-	if err := ValidateID(threadID); err != nil {
+	if err := ValidateThreadQuery(threadID); err != nil {
 		return "", err
 	}
 

@@ -92,4 +92,6 @@ After user confirmation on an item:
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/thread-resolve.sh <thread-id>
 ```
 
-Never mark a thread resolved without user confirmation.
+**Important**:
+- Never mark a thread resolved without user confirmation.
+- Never delete `.nota/` files — they are persistent records used for external sync. Use the resolve command to set status; deletion is a separate explicit action via `/nota-cleanup`.
