@@ -13,7 +13,7 @@ Remove all review comments from source code without extracting them to tracking 
 If the user confirms:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh delete --all $ARGUMENTS 2>&1
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh local delete --all $ARGUMENTS 2>&1
 ```
 
 Report how many files were modified.

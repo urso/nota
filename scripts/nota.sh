@@ -52,18 +52,4 @@ if [ "$needs_build" = true ]; then
   fi
 fi
 
-case "$subcommand" in
-  extract)
-    exec "$bin" extract --dir "$root/.nota" "$@"
-    ;;
-  list|delete)
-    exec "$bin" "$subcommand" "$@"
-    ;;
-  behavior|find|validate|read)
-    exec "$bin" "$subcommand" "$@"
-    ;;
-  *)
-    echo "error: unknown subcommand: $subcommand" >&2
-    exit 1
-    ;;
-esac
+exec "$bin" "$subcommand" "$@"

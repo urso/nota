@@ -1,72 +1,57 @@
 ---
-description: "This skill should be used when the user asks to 'show open reviews', 'continue the review', 'resume review work', 'what reviews are pending', or after context compaction or session handover. Loads existing review state from .nota/ tracking files — does not extract new comments from source code."
+description: "This skill should be used when the user asks to 'show open reviews', 'continue the review', 'resume review work', 'what reviews are pending', or after context compaction or session handover. Loads existing review state from .nota/ threads — does not extract new comments from source code."
 version: 1.0.0
 user-invocable: false
 ---
 
 # Review Context — Loading Open Reviews
 
-Load the current state of code reviews from `.nota/` tracking files. Useful after context compaction, handover, or when context about ongoing reviews has been lost.
+Load the current state of code reviews from `.nota/` thread files. Useful after context compaction, handover, or when context about ongoing reviews has been lost.
 
-## Step 1: List open tracking files
+## Step 1: List open threads
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/list-open.sh
 ```
 
-If no files listed, there are no open reviews.
+If no threads listed, there are no open reviews.
 
-## Step 2: Read open sections
+The output is tab-separated: `ID STATUS GOAL TITLE`
 
-For each file from Step 1:
+## Step 2: Read thread contents
+
+For each thread from Step 1:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/read-open.sh <file>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/read-open.sh <thread-id>
 ```
 
-This filters out `[resolved]` and `[wontfix]` sections.
+This shows the full thread with all comments.
 
 ## Step 3: Check relationships
 
-For each open file, check if it has `depends-on` or `references` in its frontmatter. If so, read those files too for context:
+For each open thread, check if it has dependencies or references. If so, read those threads too for context:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/find-review.sh --refs-of <name>
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/find-review.sh --deps-of <name>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/find-review.sh --refs-of <thread-id>
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/find-review.sh --deps-of <thread-id>
 ```
 
-Where `<name>` is the filename stem (e.g. `auth` for `.nota/auth.md`).
+## Thread format
 
-## Tracking file format
+Each `.nota/*.xml` file contains a thread:
 
-Each `.nota/*.md` file:
+- **ID**: Unique identifier (e.g. `l:abc123...` for local, `gh:123` for GitHub)
+- **Status**: `open`, `resolved`, or `wontfix`
+- **Goal**: Intent — `review`, `discuss`, `impl`, `explain`, `refactor`, `test`, `doc`, `propose`, `critique`
+- **Group**: Optional grouping name (e.g. `pr-487`, `auth-refactor`)
+- **Tags**: Optional comma-separated labels for filtering
+- **Anchor**: Optional code location (`file:line @ commit`)
+- **depends-on**: Optional comma-separated thread IDs this thread is blocked by
+- **Comments**: Ordered list of messages with author, timestamp, and content
 
-```markdown
----
-status: open
-group: optional-group-name
-depends-on:
-  - other-review-file
-references:
-  - resolved-review-file
-tags:
-  - security
----
-
-## tag — file.go:LINE
-
-Review comment body...
-```
-
-- **status**: `open` or `resolved`
-- **group**: optional name from extraction (e.g. `review(auth):` → group `auth`)
-- **depends-on**: list of filename stems that should be addressed before this one
-- **references**: list of filename stems with relevant context (may be resolved)
-- **tags**: list of labels for grouping/filtering
-- **tag** in headings identifies intent (e.g. `review`, `discuss`, `explain`, `impl`, `critique`, or custom tags). Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh behavior` for all known tags and behaviors.
-- Resolved sections have `[resolved]` or `[wontfix]` prepended to the heading
-- A resolution note appears below resolved headings as a blockquote
+Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh behavior` for all known goals and their expected behaviors.
 
 ## After loading
 
-Summarize open items including dependency relationships, continue addressing in-progress work, or answer questions about review status. Never mark an item resolved without user confirmation.
+Summarize open items including dependency relationships, continue addressing in-progress work, or answer questions about review status. Never mark a thread resolved without user confirmation.

@@ -1,0 +1,921 @@
+package main
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/urso/nota/pkg/thread"
+)
+
+func setupThreadTestDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	notaDir := filepath.Join(dir, ".nota")
+	if err := os.MkdirAll(notaDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func createTestThread(t *testing.T, dir string, th *thread.Thread) string {
+	t.Helper()
+	notaDir := filepath.Join(dir, ".nota")
+	filename := thread.Filename(th)
+	path := filepath.Join(notaDir, filename)
+	if err := thread.WriteThread(path, th); err != nil {
+		t.Fatalf("failed to write thread: %v", err)
+	}
+	return path
+}
+
+func TestThreadListCmd(t *testing.T) {
+	dir := setupThreadTestDir(t)
+
+	// Create test threads
+	threads := []*thread.Thread{
+		{
+			ID: "l:0001000100010001", Status: "open", Goal: "review", Group: "pr-1",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Review this code"}},
+			}},
+		},
+		{
+			ID: "l:0002000200020002", Status: "resolved", Goal: "impl",
+			Comments: []thread.Comment{{
+				ID: "l:c002c002c002c002", Author: "bob",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Implement feature"}},
+			}},
+		},
+		{
+			ID: "l:0003000300030003", Status: "open", Goal: "discuss", Tags: "auth,security",
+			Comments: []thread.Comment{{
+				ID: "l:c003c003c003c003", Author: "carol",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Discuss security"}},
+			}},
+		},
+	}
+
+	for _, th := range threads {
+		createTestThread(t, dir, th)
+	}
+
+	tests := []struct {
+		name       string
+		cmd        ThreadListCmd
+		wantCount  int
+		wantInOut  []string
+		wantNotOut []string
+	}{
+		{
+			name:      "no filter lists all",
+			cmd:       ThreadListCmd{},
+			wantCount: 3,
+		},
+		{
+			name:       "filter by status open",
+			cmd:        ThreadListCmd{Status: "open"},
+			wantCount:  2,
+			wantInOut:  []string{"l:0001000100010001", "l:0003000300030003"},
+			wantNotOut: []string{"l:0002000200020002"},
+		},
+		{
+			name:       "filter by goal",
+			cmd:        ThreadListCmd{Goal: "review"},
+			wantCount:  1,
+			wantInOut:  []string{"Review this code"},
+			wantNotOut: []string{"Implement feature"},
+		},
+		{
+			name:      "filter by group",
+			cmd:       ThreadListCmd{Group: "pr-1"},
+			wantCount: 1,
+			wantInOut: []string{"l:0001000100010001"},
+		},
+		{
+			name:      "filter by tag",
+			cmd:       ThreadListCmd{Tag: "auth"},
+			wantCount: 1,
+			wantInOut: []string{"Discuss security"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := tt.cmd.run(&buf, dir)
+			if err != nil {
+				t.Fatalf("run() failed: %v", err)
+			}
+
+			out := buf.String()
+			lines := strings.Split(strings.TrimSpace(out), "\n")
+			if len(lines) == 1 && lines[0] == "" {
+				lines = nil
+			}
+
+			if len(lines) != tt.wantCount {
+				t.Errorf("got %d threads, want %d\noutput: %s", len(lines), tt.wantCount, out)
+			}
+
+			for _, want := range tt.wantInOut {
+				if !strings.Contains(out, want) {
+					t.Errorf("output should contain %q\ngot: %s", want, out)
+				}
+			}
+			for _, notWant := range tt.wantNotOut {
+				if strings.Contains(out, notWant) {
+					t.Errorf("output should not contain %q\ngot: %s", notWant, out)
+				}
+			}
+		})
+	}
+}
+
+func TestThreadShowCmd(t *testing.T) {
+	dir := setupThreadTestDir(t)
+
+	th := &thread.Thread{
+		ID:     "l:showtest12345678",
+		Status: "open",
+		Goal:   "review",
+		Group:  "test-group",
+		Anchors: []thread.Anchor{{File: "main.go", Line: 42, Commit: "abc123def456"}},
+		Comments: []thread.Comment{{
+			ID: "l:c001c001c001c001", Author: "alice",
+			Bodies: []thread.Body{{Time: "2026-07-21T10:00:00Z", Content: "Check this function"}},
+		}},
+	}
+	createTestThread(t, dir, th)
+
+	t.Run("default output", func(t *testing.T) {
+		cmd := ThreadShowCmd{ID: th.ID}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		out := buf.String()
+		if !strings.Contains(out, "l:showtest12345678") {
+			t.Error("output should contain thread ID")
+		}
+		if !strings.Contains(out, "main.go:42") {
+			t.Error("output should contain anchor")
+		}
+		if !strings.Contains(out, "alice") {
+			t.Error("output should contain author")
+		}
+		if !strings.Contains(out, "Check this function") {
+			t.Error("output should contain comment body")
+		}
+	})
+
+	t.Run("raw output", func(t *testing.T) {
+		cmd := ThreadShowCmd{ID: th.ID, Raw: true}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		out := buf.String()
+		if !strings.Contains(out, "<?xml") {
+			t.Error("raw output should contain XML prolog")
+		}
+		if !strings.Contains(out, "nota-thread") {
+			t.Error("raw output should contain nota-thread element")
+		}
+	})
+
+	t.Run("json output", func(t *testing.T) {
+		cmd := ThreadShowCmd{ID: th.ID, JSON: true}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		out := buf.String()
+		if !strings.Contains(out, `"id": "l:showtest12345678"`) {
+			t.Errorf("JSON should contain id field\ngot: %s", out)
+		}
+		if !strings.Contains(out, `"status": "open"`) {
+			t.Errorf("JSON should contain status field\ngot: %s", out)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		cmd := ThreadShowCmd{ID: "l:notfound12345678"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err == nil {
+			t.Error("expected error for non-existent thread")
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			t.Errorf("error should mention 'not found', got: %v", err)
+		}
+	})
+}
+
+func TestThreadCreateCmd(t *testing.T) {
+	t.Run("creates thread with message", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		cmd := ThreadCreateCmd{
+			Message: "Test message",
+			Goal:    "review",
+		}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		out := buf.String()
+		if !strings.HasPrefix(out, "Created thread l:") {
+			t.Errorf("output should start with 'Created thread l:', got: %s", out)
+		}
+
+		// Verify thread was actually created
+		notaDir := filepath.Join(dir, ".nota")
+		entries, err := os.ReadDir(notaDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Errorf("expected 1 thread file, got %d", len(entries))
+		}
+	})
+
+	t.Run("creates thread with group", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		cmd := ThreadCreateCmd{
+			Message: "Grouped thread",
+			Goal:    "impl",
+			Group:   "my-group",
+		}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		// Verify filename includes group
+		notaDir := filepath.Join(dir, ".nota")
+		entries, err := os.ReadDir(notaDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("expected 1 file, got %d", len(entries))
+		}
+		if !strings.HasPrefix(entries[0].Name(), "my-group-") {
+			t.Errorf("filename should start with 'my-group-', got: %s", entries[0].Name())
+		}
+	})
+
+	t.Run("rejects empty message", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		cmd := ThreadCreateCmd{
+			Message: "",
+			Goal:    "review",
+		}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err == nil {
+			t.Error("expected error for empty message")
+		}
+	})
+
+	t.Run("rejects invalid goal", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		cmd := ThreadCreateCmd{
+			Message: "Test",
+			Goal:    "invalid-goal",
+		}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err == nil {
+			t.Error("expected error for invalid goal")
+		}
+	})
+}
+
+func TestThreadStatusCommands(t *testing.T) {
+	t.Run("resolve", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:0000001234567890",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Test"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadResolveCmd{ID: th.ID}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if !strings.Contains(buf.String(), "marked as resolved") {
+			t.Errorf("output should confirm resolution, got: %s", buf.String())
+		}
+
+		// Verify status changed
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if info.Thread.Status != "resolved" {
+			t.Errorf("status = %s, want resolved", info.Thread.Status)
+		}
+	})
+
+	t.Run("wontfix", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:000000f123456789",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Test"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadWontfixCmd{ID: th.ID}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if !strings.Contains(buf.String(), "marked as wontfix") {
+			t.Errorf("output should confirm wontfix, got: %s", buf.String())
+		}
+
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if info.Thread.Status != "wontfix" {
+			t.Errorf("status = %s, want wontfix", info.Thread.Status)
+		}
+	})
+
+	t.Run("reopen", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:00000e1234567890",
+			Status: "resolved",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Test"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadReopenCmd{ID: th.ID}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if !strings.Contains(buf.String(), "marked as open") {
+			t.Errorf("output should confirm reopen, got: %s", buf.String())
+		}
+
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if info.Thread.Status != "open" {
+			t.Errorf("status = %s, want open", info.Thread.Status)
+		}
+	})
+
+	t.Run("thread not found", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		cmd := ThreadResolveCmd{ID: "l:nonexistent12345"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err == nil {
+			t.Error("expected error for non-existent thread")
+		}
+	})
+}
+
+func TestThreadGoalCmd(t *testing.T) {
+	t.Run("updates goal", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:000a0e1234567890",
+			Status: "open",
+			Goal:   "review",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Test"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadGoalCmd{ID: th.ID, Goal: "impl"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if !strings.Contains(buf.String(), "goal set to impl") {
+			t.Errorf("output should confirm goal change, got: %s", buf.String())
+		}
+
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if info.Thread.Goal != "impl" {
+			t.Errorf("goal = %s, want impl", info.Thread.Goal)
+		}
+	})
+
+	t.Run("rejects invalid goal", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:000bad1234567890",
+			Status: "open",
+			Goal:   "review",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Test"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadGoalCmd{ID: th.ID, Goal: "not-a-goal"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err == nil {
+			t.Error("expected error for invalid goal")
+		}
+	})
+}
+
+func TestThreadAddCmd(t *testing.T) {
+	t.Run("adds comment to thread", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:00add01234567890",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Initial comment"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadAddCmd{ID: th.ID, Message: "Reply comment"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if !strings.Contains(buf.String(), "Added comment") {
+			t.Errorf("output should confirm comment added, got: %s", buf.String())
+		}
+
+		// Verify comment was added
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if len(info.Thread.Comments) != 2 {
+			t.Errorf("comments = %d, want 2", len(info.Thread.Comments))
+		}
+	})
+
+	t.Run("adds comment with local visibility", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:10ca1234567890ab",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Initial"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadAddCmd{ID: th.ID, Message: "Local comment", Local: true}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if info.Thread.Comments[1].Visibility != "local" {
+			t.Errorf("visibility = %s, want local", info.Thread.Comments[1].Visibility)
+		}
+	})
+
+	t.Run("adds comment with reply-to", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:0e01234567890abc",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Initial"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadAddCmd{ID: th.ID, Message: "Reply to alice", ReplyTo: "l:c001c001c001c001"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if info.Thread.Comments[1].ReplyTo == nil || info.Thread.Comments[1].ReplyTo.Ref != "l:c001c001c001c001" {
+			t.Errorf("reply-to not set correctly")
+		}
+	})
+
+	t.Run("thread not found", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		cmd := ThreadAddCmd{ID: "l:nonexistent12345", Message: "Test"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err == nil {
+			t.Error("expected error for non-existent thread")
+		}
+	})
+
+	t.Run("rejects empty message", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:e0012345678abcde",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Initial"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadAddCmd{ID: th.ID, Message: ""}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err == nil {
+			t.Error("expected error for empty message")
+		}
+	})
+
+	t.Run("rejects message and file together", func(t *testing.T) {
+		cmd := ThreadAddCmd{
+			ID:      "l:test1234567890ab",
+			Message: "hello",
+			File:    "somefile.txt",
+		}
+		_, err := cmd.resolveMessage()
+		if err == nil {
+			t.Error("expected error when both message and file are set")
+		}
+	})
+
+	t.Run("reads from file", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+		msgFile := filepath.Join(dir, "message.txt")
+		if err := os.WriteFile(msgFile, []byte("Message from file"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		th := &thread.Thread{
+			ID:     "l:f01234567890abcd",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Initial"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadAddCmd{ID: th.ID, File: msgFile}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if info.Thread.Comments[1].Bodies[0].Content != "Message from file" {
+			t.Errorf("content = %s, want 'Message from file'", info.Thread.Comments[1].Bodies[0].Content)
+		}
+	})
+}
+
+func TestThreadSpawnCmd(t *testing.T) {
+	t.Run("creates child thread with parent reference", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		parent := &thread.Thread{
+			ID:     "l:0a0e1234567890ab",
+			Status: "open",
+			Group:  "test-group",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Parent thread"}},
+			}},
+		}
+		createTestThread(t, dir, parent)
+
+		cmd := ThreadSpawnCmd{ParentID: parent.ID, Message: "Child message", Goal: "impl"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		out := buf.String()
+		if !strings.Contains(out, "Created child thread") {
+			t.Errorf("output should confirm child creation, got: %s", out)
+		}
+		if !strings.Contains(out, parent.ID) {
+			t.Errorf("output should reference parent ID, got: %s", out)
+		}
+
+		// Verify child was created with parent reference
+		notaDir := filepath.Join(dir, ".nota")
+		entries, _ := os.ReadDir(notaDir)
+		if len(entries) != 2 {
+			t.Fatalf("expected 2 thread files, got %d", len(entries))
+		}
+	})
+
+	t.Run("inherits group from parent", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		parent := &thread.Thread{
+			ID:     "l:0a0e123456789012",
+			Status: "open",
+			Group:  "inherited-group",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Parent"}},
+			}},
+		}
+		createTestThread(t, dir, parent)
+
+		cmd := ThreadSpawnCmd{ParentID: parent.ID, Message: "Child"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		// Find child thread and verify group
+		notaDir := filepath.Join(dir, ".nota")
+		infos, _ := thread.ListThreads(notaDir, thread.ThreadFilter{})
+		found := false
+		for _, info := range infos {
+			if info.Thread.Parent != nil && info.Thread.Parent.Ref == parent.ID {
+				found = true
+				if info.Thread.Group != "inherited-group" {
+					t.Errorf("child group = %s, want inherited-group", info.Thread.Group)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("child thread with parent reference not found")
+		}
+	})
+
+	t.Run("parent not found", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		cmd := ThreadSpawnCmd{ParentID: "l:nonexistent12345", Message: "Child"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err == nil {
+			t.Error("expected error for non-existent parent")
+		}
+	})
+}
+
+func TestThreadDependCmd(t *testing.T) {
+	t.Run("adds single dependency", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:de0e1d1234567890",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Test"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		blocker := &thread.Thread{
+			ID:     "l:b10c1234567890ab",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c002c002c002c002", Author: "bob",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Blocker"}},
+			}},
+		}
+		createTestThread(t, dir, blocker)
+
+		cmd := ThreadDependCmd{ID: th.ID, BlockerIDs: []string{blocker.ID}}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if !strings.Contains(buf.String(), "now depends on") {
+			t.Errorf("output should confirm dependency, got: %s", buf.String())
+		}
+
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if info.Thread.DependsOn != blocker.ID {
+			t.Errorf("depends-on = %s, want %s", info.Thread.DependsOn, blocker.ID)
+		}
+	})
+
+	t.Run("adds multiple dependencies", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		th := &thread.Thread{
+			ID:     "l:0de012345678abcd",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Test"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		blocker1 := &thread.Thread{
+			ID:     "l:b10c1234567890a1",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c002c002c002c002", Author: "bob",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Blocker1"}},
+			}},
+		}
+		createTestThread(t, dir, blocker1)
+
+		blocker2 := &thread.Thread{
+			ID:     "l:b10c1234567890b2",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c003c003c003c003", Author: "carol",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Blocker2"}},
+			}},
+		}
+		createTestThread(t, dir, blocker2)
+
+		cmd := ThreadDependCmd{ID: th.ID, BlockerIDs: []string{blocker1.ID, blocker2.ID}}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		deps := thread.ParseDependsOn(info.Thread.DependsOn)
+		if len(deps) != 2 {
+			t.Errorf("expected 2 dependencies, got %d", len(deps))
+		}
+	})
+}
+
+func TestThreadUndependCmd(t *testing.T) {
+	t.Run("removes single dependency", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		blocker := &thread.Thread{
+			ID:     "l:b10c1234567890cd",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c002c002c002c002", Author: "bob",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Blocker"}},
+			}},
+		}
+		createTestThread(t, dir, blocker)
+
+		th := &thread.Thread{
+			ID:        "l:0de0e12345678abc",
+			Status:    "open",
+			DependsOn: blocker.ID,
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Test"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadUndependCmd{ID: th.ID, BlockerIDs: []string{blocker.ID}}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if !strings.Contains(buf.String(), "has no dependencies") {
+			t.Errorf("output should indicate no dependencies, got: %s", buf.String())
+		}
+
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if info.Thread.DependsOn != "" {
+			t.Errorf("depends-on = %s, want empty", info.Thread.DependsOn)
+		}
+	})
+
+	t.Run("removes one of multiple dependencies", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		blocker1 := &thread.Thread{
+			ID:     "l:b10c1234567890e1",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c002c002c002c002", Author: "bob",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Blocker1"}},
+			}},
+		}
+		createTestThread(t, dir, blocker1)
+
+		blocker2 := &thread.Thread{
+			ID:     "l:b10c1234567890f2",
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c003c003c003c003", Author: "carol",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Blocker2"}},
+			}},
+		}
+		createTestThread(t, dir, blocker2)
+
+		th := &thread.Thread{
+			ID:        "l:0de0e1234567890a",
+			Status:    "open",
+			DependsOn: blocker1.ID + "," + blocker2.ID,
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Test"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+
+		cmd := ThreadUndependCmd{ID: th.ID, BlockerIDs: []string{blocker1.ID}}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if !strings.Contains(buf.String(), "now depends on") {
+			t.Errorf("output should show remaining dependency, got: %s", buf.String())
+		}
+
+		info, _ := thread.FindThread(filepath.Join(dir, ".nota"), th.ID)
+		if info.Thread.DependsOn != blocker2.ID {
+			t.Errorf("depends-on = %s, want %s", info.Thread.DependsOn, blocker2.ID)
+		}
+	})
+}
+
+func TestNewThread(t *testing.T) {
+	th := thread.NewThread("open", "review")
+
+	// ID should be exactly 18 chars: "l:" + 16 hex chars
+	if len(th.ID) != 18 {
+		t.Errorf("ID length = %d, want 18", len(th.ID))
+	}
+
+	// ID should match format l:[0-9a-f]{16}
+	matched, _ := regexp.MatchString(`^l:[0-9a-f]{16}$`, th.ID)
+	if !matched {
+		t.Errorf("ID %q does not match format l:[0-9a-f]{16}", th.ID)
+	}
+
+	if th.Status != "open" {
+		t.Errorf("Status = %s, want open", th.Status)
+	}
+	if th.Goal != "review" {
+		t.Errorf("Goal = %s, want review", th.Goal)
+	}
+}

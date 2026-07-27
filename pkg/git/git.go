@@ -124,7 +124,7 @@ func addGitFiles(set map[string]struct{}, dir string, args ...string) error {
 		return fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			set[line] = struct{}{}
@@ -132,4 +132,39 @@ func addGitFiles(set map[string]struct{}, dir string, args ...string) error {
 	}
 
 	return nil
+}
+
+// HeadCommit returns the current HEAD commit SHA.
+// dir is the working directory for git commands; if empty, uses os.Getwd().
+func HeadCommit(dir string) (string, error) {
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("getting working directory: %w", err)
+		}
+	}
+
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+
+	return strings.TrimSpace(string(out)), nil
+}
+
+// UserName returns the git user.name config value, or "user" as fallback.
+func UserName() string {
+	cmd := exec.Command("git", "config", "user.name")
+	out, err := cmd.Output()
+	if err != nil {
+		return "user"
+	}
+	name := strings.TrimSpace(string(out))
+	if name == "" {
+		return "user"
+	}
+	return name
 }
