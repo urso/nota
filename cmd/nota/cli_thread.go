@@ -201,11 +201,13 @@ func renderThreadTo(w io.Writer, t *thread.Thread) error {
 
 // ThreadCreateCmd creates a new thread.
 type ThreadCreateCmd struct {
-	Message string `arg:"" required:"" help:"Initial comment message"`
+	Message string `arg:"" required:"" help:"Initial comment message (title)"`
 	Goal    string `help:"Thread goal (review, discuss, impl, etc.)"`
 	Anchor  string `help:"Code anchor in file:line format"`
 	Group   string `help:"Thread group name"`
+	Tags    string `help:"Comma-separated tags (e.g. severity:critical,category:correctness)"`
 	Parent  string `help:"Parent thread ID"`
+	Body    string `help:"Extended description (- for stdin)"`
 }
 
 func (c *ThreadCreateCmd) Run() error {
@@ -213,11 +215,18 @@ func (c *ThreadCreateCmd) Run() error {
 }
 
 func (c *ThreadCreateCmd) run(w io.Writer, root string) error {
+	body, err := c.resolveBody()
+	if err != nil {
+		return err
+	}
+
 	dir := filepath.Join(root, ".nota")
 	t, err := thread.Create(dir, thread.CreateOpts{
 		Message: c.Message,
+		Body:    body,
 		Goal:    c.Goal,
 		Group:   c.Group,
+		Tags:    c.Tags,
 		Parent:  c.Parent,
 		Anchor:  c.Anchor,
 	})
@@ -227,6 +236,17 @@ func (c *ThreadCreateCmd) run(w io.Writer, root string) error {
 
 	fmt.Fprintf(w, "Created thread %s\n", t.ID)
 	return nil
+}
+
+func (c *ThreadCreateCmd) resolveBody() (string, error) {
+	if c.Body == "-" {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", fmt.Errorf("reading stdin: %w", err)
+		}
+		return string(data), nil
+	}
+	return c.Body, nil
 }
 
 // ThreadAddCmd adds a comment to an existing thread.

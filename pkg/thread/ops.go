@@ -101,8 +101,10 @@ func ParseAnchor(s string) (*Anchor, error) {
 // CreateOpts holds options for creating a thread.
 type CreateOpts struct {
 	Message string
+	Body    string
 	Goal    string
 	Group   string
+	Tags    string
 	Parent  string
 	Anchor  string
 	Author  string
@@ -136,6 +138,7 @@ func Create(dir string, opts CreateOpts) (*Thread, error) {
 	t := NewThread("open", opts.Goal)
 	t.Number = num
 	t.Group = opts.Group
+	t.Tags = opts.Tags
 
 	if opts.Parent != "" {
 		t.Parent = &Parent{Ref: opts.Parent}
@@ -153,7 +156,12 @@ func Create(dir string, opts CreateOpts) (*Thread, error) {
 	if author == "" {
 		author = git.UserName()
 	}
-	comment := NewComment(author, opts.Message)
+
+	content := opts.Message
+	if opts.Body != "" {
+		content = opts.Message + "\n\n" + opts.Body
+	}
+	comment := NewComment(author, content)
 	t.Comments = append(t.Comments, comment)
 
 	path := filepath.Join(dir, Filename(t))
