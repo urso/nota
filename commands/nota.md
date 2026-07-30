@@ -84,6 +84,24 @@ For longer responses, pipe from stdin:
 echo "Your response" | bash ${CLAUDE_PLUGIN_ROOT}/scripts/thread-add.sh <thread-id> --file=-
 ```
 
+### Authorship
+
+A thread is a conversation between the developer and you, so each comment must
+be attributed to whoever actually wrote it. `thread-add.sh` and
+`thread-spawn.sh` record `author="agent"` by default — do not pass a flag for
+your own comments.
+
+Only when you are transcribing something the developer said (relaying their
+decision verbatim, not summarizing it) add `--human`, which records the comment
+under their git user instead:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/thread-add.sh --human <thread-id> "Their words"
+```
+
+Never record your own analysis, questions, or conclusions as `--human` — that
+puts your words under the developer's name and breaks the conversation.
+
 ## Step 5: Resolution
 
 After user confirmation on an item:

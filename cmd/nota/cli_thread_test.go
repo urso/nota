@@ -919,3 +919,101 @@ func TestNewThread(t *testing.T) {
 		t.Errorf("Goal = %s, want review", th.Goal)
 	}
 }
+
+func TestAgentAuthorship(t *testing.T) {
+	// lastComment returns the most recently appended comment of a thread.
+	lastComment := func(t *testing.T, dir, id string) thread.Comment {
+		t.Helper()
+		info, err := thread.FindThread(filepath.Join(dir, ".nota"), id)
+		if err != nil || info == nil {
+			t.Fatalf("FindThread(%s) failed: %v", id, err)
+		}
+		return info.Thread.Comments[len(info.Thread.Comments)-1]
+	}
+
+	// newParent creates a thread to comment on or spawn from.
+	newParent := func(t *testing.T, dir, id string) *thread.Thread {
+		t.Helper()
+		th := &thread.Thread{
+			ID:     id,
+			Status: "open",
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Initial"}},
+			}},
+		}
+		createTestThread(t, dir, th)
+		return th
+	}
+
+	t.Run("add records agent author when --agent is set", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+		th := newParent(t, dir, "l:a9e0000000000001")
+
+		cmd := ThreadAddCmd{ID: th.ID, Message: "Agent reply", Agent: true}
+		if err := cmd.run(&bytes.Buffer{}, dir); err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if got := lastComment(t, dir, th.ID).Author; got != AgentAuthor {
+			t.Errorf("Author = %q, want %q", got, AgentAuthor)
+		}
+	})
+
+	t.Run("add falls back to git user without --agent", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+		th := newParent(t, dir, "l:a9e0000000000002")
+
+		cmd := ThreadAddCmd{ID: th.ID, Message: "Human reply"}
+		if err := cmd.run(&bytes.Buffer{}, dir); err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if got := lastComment(t, dir, th.ID).Author; got == AgentAuthor {
+			t.Errorf("Author = %q, want the git user, not the agent", got)
+		}
+	})
+
+	t.Run("create records agent author when --agent is set", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+
+		cmd := ThreadCreateCmd{Message: "Agent-filed finding", Goal: "review", Agent: true}
+		if err := cmd.run(&bytes.Buffer{}, dir); err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		threads, err := thread.ListThreads(filepath.Join(dir, ".nota"), thread.ThreadFilter{})
+		if err != nil || len(threads) != 1 {
+			t.Fatalf("ListThreads() = %d threads, err %v; want 1", len(threads), err)
+		}
+		if got := threads[0].Thread.Comments[0].Author; got != AgentAuthor {
+			t.Errorf("Author = %q, want %q", got, AgentAuthor)
+		}
+	})
+
+	t.Run("spawn records agent author when --agent is set", func(t *testing.T) {
+		dir := setupThreadTestDir(t)
+		parent := newParent(t, dir, "l:a9e0000000000003")
+
+		cmd := ThreadSpawnCmd{ParentID: parent.ID, Message: "Agent follow-up", Agent: true}
+		var buf bytes.Buffer
+		if err := cmd.run(&buf, dir); err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		// The child is the thread that is not the parent.
+		threads, _ := thread.ListThreads(filepath.Join(dir, ".nota"), thread.ThreadFilter{})
+		var child *thread.Thread
+		for _, info := range threads {
+			if info.Thread.ID != parent.ID {
+				child = info.Thread
+			}
+		}
+		if child == nil {
+			t.Fatal("child thread not created")
+		}
+		if got := child.Comments[0].Author; got != AgentAuthor {
+			t.Errorf("Author = %q, want %q", got, AgentAuthor)
+		}
+	})
+}

@@ -19,6 +19,7 @@ When a code review produces findings too complex or numerous to address in one s
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh thread create "<title>" \
+  --agent \
   --goal=review \
   --anchor="<file>:<line>" \
   --tags="<severity>,<category>" \
@@ -28,6 +29,8 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh thread create "<title>" \
 ### Fields
 
 - **title**: One-line summary of the finding
+- **agent**: Always pass `--agent`. You are filing this finding, so it must be
+  attributed to `author="agent"` and not to the developer's git user.
 - **goal**: Use `review`
 - **anchor**: File and line number (e.g. `internal/txn.go:91`)
 - **tags**: Comma-separated labels. Conventions:
@@ -47,6 +50,7 @@ Create:
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh thread create "Race condition: Done() and Cleanup() unsynchronized access to t.done" \
+  --agent \
   --goal=review \
   --anchor="internal/volumetxn/txn.go:91" \
   --tags="severity:critical,category:correctness" \
@@ -67,7 +71,7 @@ Suggested fix: Add sync.Mutex to protect t.done, t.cleanups, t.locks, or use syn
 For long bodies, use `--body=-`:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh thread create "Title" --goal=review --anchor="file:line" --body=- <<'EOF'
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/nota.sh thread create "Title" --agent --goal=review --anchor="file:line" --body=- <<'EOF'
 [bug] Description here...
 
 ## Trigger scenario

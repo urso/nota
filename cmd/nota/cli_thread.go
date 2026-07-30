@@ -199,6 +199,19 @@ func renderThreadTo(w io.Writer, t *thread.Thread) error {
 	return nil
 }
 
+// AgentAuthor is the author recorded for comments written by an AI agent.
+// Human comments fall back to git config user.name.
+const AgentAuthor = "agent"
+
+// authorFor returns the author to record for a comment. An empty string lets
+// the thread package fall back to git config user.name.
+func authorFor(agent bool) string {
+	if agent {
+		return AgentAuthor
+	}
+	return ""
+}
+
 // ThreadCreateCmd creates a new thread.
 type ThreadCreateCmd struct {
 	Message string `arg:"" required:"" help:"Initial comment message (title)"`
@@ -208,6 +221,7 @@ type ThreadCreateCmd struct {
 	Tags    string `help:"Comma-separated tags (e.g. severity:critical,category:correctness)"`
 	Parent  string `help:"Parent thread ID"`
 	Body    string `help:"Extended description (- for stdin)"`
+	Agent   bool   `help:"Record the comment as authored by the agent instead of the git user"`
 }
 
 func (c *ThreadCreateCmd) Run() error {
@@ -229,6 +243,7 @@ func (c *ThreadCreateCmd) run(w io.Writer, root string) error {
 		Tags:    c.Tags,
 		Parent:  c.Parent,
 		Anchor:  c.Anchor,
+		Author:  authorFor(c.Agent),
 	})
 	if err != nil {
 		return err
@@ -257,6 +272,7 @@ type ThreadAddCmd struct {
 	Local   bool   `help:"Set visibility to local"`
 	ReplyTo string `help:"Comment ID to reply to" name:"reply-to"`
 	Anchor  string `help:"Code anchor in file:line format"`
+	Agent   bool   `help:"Record the comment as authored by the agent instead of the git user"`
 }
 
 func (c *ThreadAddCmd) Run() error {
@@ -275,6 +291,7 @@ func (c *ThreadAddCmd) run(w io.Writer, root string) error {
 		Local:   c.Local,
 		ReplyTo: c.ReplyTo,
 		Anchor:  c.Anchor,
+		Author:  authorFor(c.Agent),
 	})
 	if err != nil {
 		return err
@@ -386,6 +403,7 @@ type ThreadSpawnCmd struct {
 	Message  string `arg:"" required:"" help:"Initial comment message"`
 	Goal     string `help:"Thread goal (review, discuss, impl, etc.)"`
 	Group    string `help:"Thread group name (inherits from parent if not specified)"`
+	Agent    bool   `help:"Record the comment as authored by the agent instead of the git user"`
 }
 
 func (c *ThreadSpawnCmd) Run() error {
@@ -398,6 +416,7 @@ func (c *ThreadSpawnCmd) run(w io.Writer, root string) error {
 		Message: c.Message,
 		Goal:    c.Goal,
 		Group:   c.Group,
+		Author:  authorFor(c.Agent),
 	})
 	if err != nil {
 		return err
