@@ -1,0 +1,33 @@
+{
+  "id": "PRRT_kwDODKw3uc6FbH19",
+  "isResolved": true,
+  "isOutdated": true,
+  "subjectType": "LINE",
+  "path": "pkg/cmd/discussion/client/client_impl.go",
+  "diffSide": "RIGHT",
+  "line": null,
+  "originalLine": 371,
+  "startLine": null,
+  "comments": {
+    "totalCount": 1,
+    "nodes": [
+      {
+        "id": "PRRC_kwDODKw3uc7Fyv6t",
+        "fullDatabaseId": "3318415021",
+        "author": {
+          "login": "github-advanced-security"
+        },
+        "body": "## CodeQL / Incorrect conversion between integer types\n\nIncorrect conversion of an integer with architecture-dependent bit size from [strconv.Atoi](1) to a lower bit size type int32 without an upper bound check.\nIncorrect conversion of an integer with architecture-dependent bit size from [strconv.Atoi](2) to a lower bit size type int32 without an upper bound check.\nIncorrect conversion of an integer with architecture-dependent bit size from [strconv.Atoi](3) to a lower bit size type int32 without an upper bound check.\n\n[Show more details](https://github.com/cli/cli/security/code-scanning/213)",
+        "createdAt": "2026-05-28T14:17:17Z",
+        "updatedAt": "2026-05-28T14:17:17Z",
+        "lastEditedAt": null,
+        "commit": {
+          "oid": "5e6a58bf4d2697f0a3cbca8554c5891028a12690"
+        },
+        "originalCommit": {
+          "oid": "b6d5f8485468c1ad54091d16992b8354477b1213"
+        }
+      }
+    ]
+  }
+}
