@@ -27,8 +27,11 @@ func TestGroupToThread(t *testing.T) {
 		},
 	}
 
-	th := groupToThread(g, "abc123", fileLines)
+	th := groupToThread(g, "abc123", fileLines, 42)
 
+	if th.Number != 42 {
+		t.Errorf("expected number 42, got %d", th.Number)
+	}
 	if th.Status != "open" {
 		t.Errorf("expected status 'open', got %q", th.Status)
 	}
@@ -81,7 +84,7 @@ func TestGroupToThreadMultipleEntries(t *testing.T) {
 		},
 	}
 
-	th := groupToThread(g, "abc123", fileLines)
+	th := groupToThread(g, "abc123", fileLines, 0)
 
 	// Goal comes from first entry.
 	if th.Goal != "review" {
@@ -110,7 +113,7 @@ func TestGroupToThreadWithReferences(t *testing.T) {
 		},
 	}
 
-	th := groupToThread(g, "", nil)
+	th := groupToThread(g, "", nil, 0)
 
 	if len(th.Refs) != 1 {
 		t.Fatalf("expected 1 ref, got %d", len(th.Refs))

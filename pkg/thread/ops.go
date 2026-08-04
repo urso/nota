@@ -13,58 +13,76 @@ import (
 	"github.com/urso/nota/pkg/git"
 )
 
-// lockThread acquires an exclusive lock on a thread file.
-// It creates a .lock file alongside the thread and returns an unlock function.
-// The unlock function should be deferred to release the lock.
-func lockThread(dir, threadID string) (unlock func() error, err error) {
-	// Create a lock file path based on thread ID
-	lockPath := filepath.Join(dir, threadID+".lock")
-
-	// Ensure directory exists
+// LockDir acquires an exclusive lock on the thread directory.
+// Use this when allocating thread numbers to prevent races between concurrent
+// Create, Spawn, or extract operations.
+func LockDir(dir string) (unlock func() error, err error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating lock directory: %w", err)
 	}
 
+	lockPath := filepath.Join(dir, ".nota.lock")
 	fl := flock.New(lockPath)
 	if err := fl.Lock(); err != nil {
-		return nil, fmt.Errorf("acquiring lock for thread %s: %w", threadID, err)
+		return nil, fmt.Errorf("acquiring directory lock: %w", err)
 	}
 
 	return func() error {
-		defer os.Remove(lockPath) // Clean up lock file
+		defer os.Remove(lockPath)
 		return fl.Unlock()
 	}, nil
 }
 
-var localIDPattern = regexp.MustCompile(`^l:[0-9a-f]{16}$`)
-var githubIDPattern = regexp.MustCompile(`^gh:\d+$`)
+// threadIDPattern matches thread IDs, which nota always generates itself:
+// "l:" for local threads and "gh:" for threads pulled from GitHub.
+var threadIDPattern = regexp.MustCompile(`^(l|gh):[0-9a-f]{16}$`)
+
+// opaqueCommentIDPattern matches comment IDs carrying a remote node ID, which
+// is opaque: GitHub migrated from base64 ("MDI0OlB1bGx...") to prefixed
+// ("PRRC_kwDO...") node IDs, so no shape beyond "non-empty" can be assumed.
+var opaqueCommentIDPattern = regexp.MustCompile(`^gh:[A-Za-z0-9_=-]+$`)
+
 var numberPattern = regexp.MustCompile(`^[0-9]+$`)
 
-// ValidateID checks if a thread or comment ID has a valid format.
+// ValidateID checks if a thread ID has a valid format.
+// Thread IDs are always generated locally, so the format is strict.
 func ValidateID(id string) error {
-	if localIDPattern.MatchString(id) || githubIDPattern.MatchString(id) {
+	if threadIDPattern.MatchString(id) {
 		return nil
 	}
-	return fmt.Errorf("invalid thread ID format, expected l:uuid or gh:id")
+	return fmt.Errorf("invalid thread ID format, expected l:<16 hex> or gh:<16 hex>")
+}
+
+// ValidateCommentID checks if a comment ID has a valid format.
+// In addition to locally generated IDs it accepts opaque "gh:<node-id>" IDs,
+// which pulled comments carry verbatim from GitHub.
+func ValidateCommentID(id string) error {
+	if threadIDPattern.MatchString(id) || opaqueCommentIDPattern.MatchString(id) {
+		return nil
+	}
+	return fmt.Errorf("invalid comment ID format, expected l:<16 hex>, gh:<16 hex>, or gh:<node-id>")
 }
 
 // ValidateThreadQuery checks if a query is a valid thread ID or number.
 func ValidateThreadQuery(query string) error {
-	if localIDPattern.MatchString(query) || githubIDPattern.MatchString(query) || numberPattern.MatchString(query) {
+	if threadIDPattern.MatchString(query) || numberPattern.MatchString(query) {
 		return nil
 	}
-	return fmt.Errorf("invalid thread query format, expected l:uuid, gh:id, or number")
+	return fmt.Errorf("invalid thread query format, expected l:<16 hex>, gh:<16 hex>, or number")
 }
 
 // Filename returns the filename for a thread based on its number, ID, and group.
-// Format: [group-]<number>-<id>.xml
+// Format: [group-]<number>-<prefix>_<id>.xml
+//
+// The ID's ":" is translated to "_" because colons are not portable in
+// filenames: Windows reserves them, and macOS Finder renders them as "/".
 func Filename(t *Thread) string {
-	idSuffix := strings.TrimPrefix(t.ID, "l:")
+	idPart := strings.ReplaceAll(t.ID, ":", "_")
 	numStr := fmt.Sprintf("%03d", t.Number)
 	if t.Group != "" {
-		return fmt.Sprintf("%s-%s-%s.xml", t.Group, numStr, idSuffix)
+		return fmt.Sprintf("%s-%s-%s.xml", t.Group, numStr, idPart)
 	}
-	return fmt.Sprintf("%s-%s.xml", numStr, idSuffix)
+	return fmt.Sprintf("%s-%s.xml", numStr, idPart)
 }
 
 // ParseAnchor parses a "file:line" string into an Anchor.
@@ -126,9 +144,11 @@ func Create(dir string, opts CreateOpts) (*Thread, error) {
 		}
 	}
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("creating directory: %w", err)
+	unlock, err := LockDir(dir)
+	if err != nil {
+		return nil, err
 	}
+	defer unlock()
 
 	num, err := NextNumber(dir)
 	if err != nil {
@@ -192,13 +212,13 @@ func AddComment(dir, threadID string, opts AddCommentOpts) (*Comment, error) {
 	}
 
 	if opts.ReplyTo != "" {
-		if err := ValidateID(opts.ReplyTo); err != nil {
+		if err := ValidateCommentID(opts.ReplyTo); err != nil {
 			return nil, fmt.Errorf("invalid reply-to ID: %w", err)
 		}
 	}
 
-	// Acquire lock before read-modify-write
-	unlock, err := lockThread(dir, threadID)
+	// Acquire directory lock before read-modify-write
+	unlock, err := LockDir(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -246,8 +266,8 @@ func UpdateStatus(dir, threadID, status string) error {
 		return err
 	}
 
-	// Acquire lock before read-modify-write
-	unlock, err := lockThread(dir, threadID)
+	// Acquire directory lock before read-modify-write
+	unlock, err := LockDir(dir)
 	if err != nil {
 		return err
 	}
@@ -275,8 +295,8 @@ func UpdateGoal(dir, threadID, goal string) error {
 		return fmt.Errorf("invalid goal %q: must be one of %s", goal, strings.Join(GoalValues, ", "))
 	}
 
-	// Acquire lock before read-modify-write
-	unlock, err := lockThread(dir, threadID)
+	// Acquire directory lock before read-modify-write
+	unlock, err := LockDir(dir)
 	if err != nil {
 		return err
 	}
@@ -316,8 +336,8 @@ func Spawn(dir, parentID string, opts SpawnOpts) (*Thread, error) {
 		return nil, fmt.Errorf("invalid goal %q: must be one of %s", opts.Goal, strings.Join(GoalValues, ", "))
 	}
 
-	// Acquire lock on parent before reading it
-	unlock, err := lockThread(dir, parentID)
+	// Acquire directory lock for the read-modify-write operation
+	unlock, err := LockDir(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -329,10 +349,6 @@ func Spawn(dir, parentID string, opts SpawnOpts) (*Thread, error) {
 	}
 	if parentInfo == nil {
 		return nil, fmt.Errorf("thread not found: %s", parentID)
-	}
-
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("creating directory: %w", err)
 	}
 
 	num, err := NextNumber(dir)
@@ -377,8 +393,8 @@ func AddDependencies(dir, threadID string, blockerIDs []string) (string, error) 
 		}
 	}
 
-	// Acquire lock before read-modify-write
-	unlock, err := lockThread(dir, threadID)
+	// Acquire directory lock before read-modify-write
+	unlock, err := LockDir(dir)
 	if err != nil {
 		return "", err
 	}
@@ -419,8 +435,8 @@ func RemoveDependencies(dir, threadID string, blockerIDs []string) (string, erro
 		}
 	}
 
-	// Acquire lock before read-modify-write
-	unlock, err := lockThread(dir, threadID)
+	// Acquire directory lock before read-modify-write
+	unlock, err := LockDir(dir)
 	if err != nil {
 		return "", err
 	}

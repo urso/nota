@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/urso/nota/pkg/deleter"
@@ -73,6 +74,8 @@ func ValidateThread(t *Thread) error {
 		errs = append(errs, "thread must have at least one comment")
 	}
 
+	errs = append(errs, validateSync(t.Sync)...)
+
 	for i, c := range t.Comments {
 		if c.ID == "" {
 			errs = append(errs, fmt.Sprintf("comment %d: missing required field: id", i))
@@ -115,4 +118,31 @@ func ValidateThread(t *Thread) error {
 		return errors.New(strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+// validateSync checks <nota-sync> structure. Only structure is enforced, not
+// value vocabularies: sync's own matcher depends on these invariants, whereas
+// an unexpected sync-status or an odd external-id degrades gracefully.
+func validateSync(s *SyncConfig) []string {
+	if s == nil {
+		return nil
+	}
+
+	var errs []string
+
+	if s.Provider == "" {
+		errs = append(errs, "sync: missing required field: provider")
+	}
+
+	if s.Kind != "" && !slices.Contains(SyncKindValues, s.Kind) {
+		errs = append(errs, fmt.Sprintf("sync: invalid kind %q: must be one of %v", s.Kind, SyncKindValues))
+	}
+
+	// An absent kind means "review-thread", which requires a remote thread ID.
+	// Only the PR conversation container legitimately has none.
+	if s.EffectiveKind() == SyncKindReviewThread && s.ThreadID == "" {
+		errs = append(errs, fmt.Sprintf("sync: missing required field: thread-id (required unless kind=%q)", SyncKindPR))
+	}
+
+	return errs
 }

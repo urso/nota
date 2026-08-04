@@ -140,10 +140,10 @@ func TestThreadShowCmd(t *testing.T) {
 	dir := setupThreadTestDir(t)
 
 	th := &thread.Thread{
-		ID:     "l:showtest12345678",
-		Status: "open",
-		Goal:   "review",
-		Group:  "test-group",
+		ID:      "l:showtest12345678",
+		Status:  "open",
+		Goal:    "review",
+		Group:   "test-group",
 		Anchors: []thread.Anchor{{File: "main.go", Line: 42, Commit: "abc123def456"}},
 		Comments: []thread.Comment{{
 			ID: "l:c001c001c001c001", Author: "alice",
@@ -218,6 +218,210 @@ func TestThreadShowCmd(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "not found") {
 			t.Errorf("error should mention 'not found', got: %v", err)
+		}
+	})
+}
+
+func TestThreadShowFileAnchor(t *testing.T) {
+	dir := setupThreadTestDir(t)
+
+	th := &thread.Thread{
+		ID:          "l:fileanchor123456",
+		Status:      "open",
+		Goal:        "review",
+		FileAnchors: []thread.FileAnchor{{File: "handlers/auth.go", Commit: "abc123def456"}},
+		Comments: []thread.Comment{{
+			ID: "l:c001c001c001c001", Author: "github:alice",
+			Bodies: []thread.Body{{Time: "2026-07-21T10:00:00Z", Content: "This file needs a package doc"}},
+		}},
+	}
+	createTestThread(t, dir, th)
+
+	cmd := ThreadShowCmd{ID: th.ID, Authors: authorsAll}
+	var buf bytes.Buffer
+	if err := cmd.run(&buf, dir); err != nil {
+		t.Fatalf("run() failed: %v", err)
+	}
+
+	out := buf.String()
+	// A file anchor renders under the same "Anchor:" label; the absent line
+	// number is what distinguishes it.
+	if !strings.Contains(out, "Anchor: handlers/auth.go @ abc123d") {
+		t.Errorf("expected file anchor without a line number, got:\n%s", out)
+	}
+	if strings.Contains(out, "handlers/auth.go:") {
+		t.Errorf("file anchor must not render a line number, got:\n%s", out)
+	}
+}
+
+func TestThreadShowAuthorsFilter(t *testing.T) {
+	dir := setupThreadTestDir(t)
+
+	th := &thread.Thread{
+		ID:     "l:authorfilter1234",
+		Status: "open",
+		Goal:   "review",
+		Comments: []thread.Comment{
+			{ID: "l:c001c001c001c001", Author: "github:alice", Bodies: []thread.Body{{Time: "t1", Content: "human one"}}},
+			{ID: "l:c002c002c002c002", Author: "github:prow[bot]", Bodies: []thread.Body{{Time: "t2", Content: "bot one"}}},
+			{ID: "l:c003c003c003c003", Author: "github:bob", Bodies: []thread.Body{{Time: "t3", Content: "human two"}}},
+		},
+	}
+	createTestThread(t, dir, th)
+
+	tests := []struct {
+		name       string
+		authors    string
+		wantInOut  []string
+		wantNotOut []string
+	}{
+		{
+			name:      "default all shows bots",
+			authors:   authorsAll,
+			wantInOut: []string{"human one", "bot one", "human two"},
+		},
+		{
+			name:       "humans excludes bots",
+			authors:    authorsHumans,
+			wantInOut:  []string{"human one", "human two"},
+			wantNotOut: []string{"bot one"},
+		},
+		{
+			name:       "bots excludes humans",
+			authors:    authorsBots,
+			wantInOut:  []string{"bot one"},
+			wantNotOut: []string{"human one", "human two"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := ThreadShowCmd{ID: th.ID, Authors: tt.authors}
+			var buf bytes.Buffer
+			if err := cmd.run(&buf, dir); err != nil {
+				t.Fatalf("run() failed: %v", err)
+			}
+
+			out := buf.String()
+			for _, want := range tt.wantInOut {
+				if !strings.Contains(out, want) {
+					t.Errorf("expected output to contain %q, got:\n%s", want, out)
+				}
+			}
+			for _, notWant := range tt.wantNotOut {
+				if strings.Contains(out, notWant) {
+					t.Errorf("expected output not to contain %q, got:\n%s", notWant, out)
+				}
+			}
+		})
+	}
+}
+
+func TestThreadShowLimit(t *testing.T) {
+	dir := setupThreadTestDir(t)
+
+	th := &thread.Thread{
+		ID:     "l:limittest123456a",
+		Status: "open",
+		Goal:   "review",
+		Comments: []thread.Comment{
+			{ID: "l:c001c001c001c001", Author: "alice", Bodies: []thread.Body{{Time: "t1", Content: "the review concern"}}},
+			{ID: "l:c002c002c002c002", Author: "bob", Bodies: []thread.Body{{Time: "t2", Content: "second reply"}}},
+			{ID: "l:c003c003c003c003", Author: "carol", Bodies: []thread.Body{{Time: "t3", Content: "third reply"}}},
+			{ID: "l:c004c004c004c004", Author: "dave", Bodies: []thread.Body{{Time: "t4", Content: "fourth reply"}}},
+		},
+	}
+	createTestThread(t, dir, th)
+
+	t.Run("unbounded by default", func(t *testing.T) {
+		cmd := ThreadShowCmd{ID: th.ID, Authors: authorsAll}
+		var buf bytes.Buffer
+		if err := cmd.run(&buf, dir); err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		out := buf.String()
+		for _, want := range []string{"the review concern", "second reply", "third reply", "fourth reply"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("expected output to contain %q, got:\n%s", want, out)
+			}
+		}
+		if strings.Contains(out, "omitted") {
+			t.Errorf("unbounded output should not elide, got:\n%s", out)
+		}
+	})
+
+	t.Run("limit keeps the opening comment and marks the gap", func(t *testing.T) {
+		cmd := ThreadShowCmd{ID: th.ID, Authors: authorsAll, Limit: 2}
+		var buf bytes.Buffer
+		if err := cmd.run(&buf, dir); err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		out := buf.String()
+		// The first comment is the review concern; everything after responds
+		// to it, so it survives the limit.
+		if !strings.Contains(out, "the review concern") {
+			t.Errorf("expected the opening comment to always be shown, got:\n%s", out)
+		}
+		if !strings.Contains(out, "third reply") || !strings.Contains(out, "fourth reply") {
+			t.Errorf("expected the last 2 comments, got:\n%s", out)
+		}
+		if strings.Contains(out, "second reply") {
+			t.Errorf("expected the second comment to be elided, got:\n%s", out)
+		}
+		// Silent truncation is indistinguishable from a short thread.
+		if !strings.Contains(out, "... 1 comments omitted ...") {
+			t.Errorf("expected an elision marker for 1 omitted comment, got:\n%s", out)
+		}
+	})
+
+	t.Run("limit covering the whole thread does not elide", func(t *testing.T) {
+		cmd := ThreadShowCmd{ID: th.ID, Authors: authorsAll, Limit: 4}
+		var buf bytes.Buffer
+		if err := cmd.run(&buf, dir); err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		if out := buf.String(); strings.Contains(out, "omitted") {
+			t.Errorf("limit >= comment count should not elide, got:\n%s", out)
+		}
+	})
+
+	t.Run("limit applies after the author filter", func(t *testing.T) {
+		botThread := &thread.Thread{
+			ID:     "l:limitbots1234567",
+			Status: "open",
+			Comments: []thread.Comment{
+				{ID: "l:d001d001d001d001", Author: "alice", Bodies: []thread.Body{{Time: "t1", Content: "opening concern"}}},
+				{ID: "l:d002d002d002d002", Author: "prow[bot]", Bodies: []thread.Body{{Time: "t2", Content: "ci noise"}}},
+				{ID: "l:d003d003d003d003", Author: "bob", Bodies: []thread.Body{{Time: "t3", Content: "human reply one"}}},
+				{ID: "l:d004d004d004d004", Author: "carol", Bodies: []thread.Body{{Time: "t4", Content: "human reply two"}}},
+			},
+		}
+		createTestThread(t, dir, botThread)
+
+		cmd := ThreadShowCmd{ID: botThread.ID, Authors: authorsHumans, Limit: 2}
+		var buf bytes.Buffer
+		if err := cmd.run(&buf, dir); err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		out := buf.String()
+		// "the last 2 human comments", plus the always-kept opening comment.
+		if !strings.Contains(out, "opening concern") {
+			t.Errorf("expected the opening comment, got:\n%s", out)
+		}
+		if !strings.Contains(out, "human reply one") || !strings.Contains(out, "human reply two") {
+			t.Errorf("expected the last 2 human comments, got:\n%s", out)
+		}
+		if strings.Contains(out, "ci noise") {
+			t.Errorf("bot comment should be filtered out, got:\n%s", out)
+		}
+		// 3 humans, 2 shown in the tail, and the opening comment is one of the
+		// 3 — so nothing is actually missing between them.
+		if strings.Contains(out, "omitted") {
+			t.Errorf("nothing should be elided here, got:\n%s", out)
 		}
 	})
 }

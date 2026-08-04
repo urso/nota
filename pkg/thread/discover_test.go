@@ -153,9 +153,9 @@ func TestFindThread(t *testing.T) {
 
 func TestThreadTitle(t *testing.T) {
 	tests := []struct {
-		name    string
-		thread  *Thread
-		want    string
+		name   string
+		thread *Thread
+		want   string
 	}{
 		{
 			name:   "empty thread",

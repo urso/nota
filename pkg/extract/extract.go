@@ -8,10 +8,8 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -269,11 +267,9 @@ func DeleteFromFiles(fileContents map[string][]byte, fileRanges map[string][]del
 	return nil
 }
 
-var reReviewFile = regexp.MustCompile(`^review-(\d+)\.(md|xml)$`)
-
 // WriteThreadFiles writes groups as XML thread files in dir.
 // Named groups go to {dir}/{name}.xml.
-// Unnamed groups go to {dir}/review-{NNN}.xml.
+// Unnamed groups go to {dir}/{NNN}-{prefix}_{id}.xml.
 // File paths are printed to stderr.
 func WriteThreadFiles(dir string, groups []grouper.Group, fileContents map[string][]byte) error {
 	return WriteThreadFilesTo(os.Stderr, dir, groups, fileContents)
@@ -299,19 +295,37 @@ func WriteThreadFilesTo(w io.Writer, dir string, groups []grouper.Group, fileCon
 	// Pre-split file contents into lines once for all groups.
 	fileLines := splitFileLines(fileContents)
 
-	nextNum := nextReviewNumber(dir)
+	// Unnamed groups share the thread numbering sequence with thread.Create,
+	// so a pulled, created, and extracted thread can never collide on number.
+	// Lock the directory to prevent races with concurrent Create/Spawn calls.
+	unlock, err := thread.LockDir(dir)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	nextNum, err := thread.NextNumber(dir)
+	if err != nil {
+		return fmt.Errorf("getting next thread number: %w", err)
+	}
 
 	for _, g := range groups {
+		var t *thread.Thread
 		var filePath string
+
 		if g.Name != "" {
+			// Named groups keep a stable filename so re-extracting the same
+			// group overwrites rather than accumulating duplicate threads.
 			safeName, err := sanitizeGroupName(g.Name)
 			if err != nil {
 				return fmt.Errorf("invalid group name %q: %w", g.Name, err)
 			}
 			filePath = filepath.Join(dir, safeName+".xml")
+			t = groupToThread(g, commit, fileLines, 0)
 		} else {
-			filePath = filepath.Join(dir, fmt.Sprintf("review-%03d.xml", nextNum))
+			t = groupToThread(g, commit, fileLines, nextNum)
 			nextNum++
+			filePath = filepath.Join(dir, thread.Filename(t))
 		}
 
 		absPath, err := filepath.Abs(filePath)
@@ -322,7 +336,6 @@ func WriteThreadFilesTo(w io.Writer, dir string, groups []grouper.Group, fileCon
 			return fmt.Errorf("group name %q resolves outside target directory", g.Name)
 		}
 
-		t := groupToThread(g, commit, fileLines)
 		if err := thread.WriteThread(filePath, t); err != nil {
 			return err
 		}
@@ -353,27 +366,4 @@ func sanitizeGroupName(name string) (string, error) {
 	}
 
 	return name, nil
-}
-
-func nextReviewNumber(dir string) int {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return 1
-	}
-
-	max := 0
-	for _, e := range entries {
-		m := reReviewFile.FindStringSubmatch(e.Name())
-		if m == nil {
-			continue
-		}
-		n, err := strconv.Atoi(m[1])
-		if err != nil {
-			continue
-		}
-		if n > max {
-			max = n
-		}
-	}
-	return max + 1
 }

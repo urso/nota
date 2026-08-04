@@ -31,7 +31,6 @@ func TestParseHunkHeader(t *testing.T) {
 	}
 }
 
-
 func TestApplyHunks(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -84,11 +83,11 @@ func TestApplyHunks(t *testing.T) {
 			hunks: []Hunk{{
 				OldStart: 10, OldCount: 3, NewStart: 10, NewCount: 5,
 				Lines: []DiffLine{
-					{Type: ' ', Content: "context"},   // old 10 -> new 10
-					{Type: '+', Content: "added 1"},   // new 11
-					{Type: '+', Content: "added 2"},   // new 12
-					{Type: ' ', Content: "original"},  // old 11 -> new 13
-					{Type: ' ', Content: "another"},   // old 12 -> new 14
+					{Type: ' ', Content: "context"},  // old 10 -> new 10
+					{Type: '+', Content: "added 1"},  // new 11
+					{Type: '+', Content: "added 2"},  // new 12
+					{Type: ' ', Content: "original"}, // old 11 -> new 13
+					{Type: ' ', Content: "another"},  // old 12 -> new 14
 				},
 			}},
 			expected: 13, // line 11 maps to new line 13
@@ -267,41 +266,152 @@ func TestTraceAnchorEmptyCommit(t *testing.T) {
 }
 
 func TestCachedGitOps(t *testing.T) {
-	calls := 0
+	t.Run("IsAncestorOf", func(t *testing.T) {
+		calls := 0
+		mock := &mockGitOps{
+			isAncestorFn: func(a, d string) (bool, error) {
+				calls++
+				return a == "commit1", nil
+			},
+		}
+
+		cached := NewCachedGitOps(mock)
+
+		// First call should hit the mock
+		result1, _ := cached.IsAncestorOf("commit1", "commit2")
+		if !result1 {
+			t.Error("expected true for commit1 -> commit2")
+		}
+		if calls != 1 {
+			t.Errorf("expected 1 call, got %d", calls)
+		}
+
+		// Second call with same args should use cache
+		result2, _ := cached.IsAncestorOf("commit1", "commit2")
+		if !result2 {
+			t.Error("expected true for cached result")
+		}
+		if calls != 1 {
+			t.Errorf("expected still 1 call (cached), got %d", calls)
+		}
+
+		// Different args should call mock
+		result3, _ := cached.IsAncestorOf("commit3", "commit2")
+		if result3 {
+			t.Error("expected false for commit3 -> commit2")
+		}
+		if calls != 2 {
+			t.Errorf("expected 2 calls, got %d", calls)
+		}
+	})
+
+	t.Run("GetDiffs", func(t *testing.T) {
+		calls := 0
+		mock := &mockGitOps{
+			getDiffsFn: func(from, to, file string) ([]Diff, error) {
+				calls++
+				return []Diff{{OldName: file, NewName: file}}, nil
+			},
+		}
+
+		cached := NewCachedGitOps(mock)
+
+		// First call should hit the mock
+		diffs1, _ := cached.GetDiffs("c1", "c2", "file.go")
+		if len(diffs1) != 1 || diffs1[0].NewName != "file.go" {
+			t.Errorf("unexpected result: %v", diffs1)
+		}
+		if calls != 1 {
+			t.Errorf("expected 1 call, got %d", calls)
+		}
+
+		// Second call with same args should use cache
+		diffs2, _ := cached.GetDiffs("c1", "c2", "file.go")
+		if len(diffs2) != 1 {
+			t.Error("expected cached result")
+		}
+		if calls != 1 {
+			t.Errorf("expected still 1 call (cached), got %d", calls)
+		}
+
+		// Different args should call mock
+		_, _ = cached.GetDiffs("c1", "c3", "file.go")
+		if calls != 2 {
+			t.Errorf("expected 2 calls, got %d", calls)
+		}
+	})
+
+	t.Run("MergeBase", func(t *testing.T) {
+		calls := 0
+		mock := &mockGitOps{
+			mergeBaseFn: func(c1, c2 string) (string, error) {
+				calls++
+				return "base-" + c1 + "-" + c2, nil
+			},
+		}
+
+		cached := NewCachedGitOps(mock)
+
+		// First call should hit the mock
+		base1, _ := cached.MergeBase("c1", "c2")
+		if base1 != "base-c1-c2" {
+			t.Errorf("unexpected result: %s", base1)
+		}
+		if calls != 1 {
+			t.Errorf("expected 1 call, got %d", calls)
+		}
+
+		// Second call with same args should use cache
+		base2, _ := cached.MergeBase("c1", "c2")
+		if base2 != "base-c1-c2" {
+			t.Error("expected cached result")
+		}
+		if calls != 1 {
+			t.Errorf("expected still 1 call (cached), got %d", calls)
+		}
+
+		// Different args should call mock
+		_, _ = cached.MergeBase("c1", "c3")
+		if calls != 2 {
+			t.Errorf("expected 2 calls, got %d", calls)
+		}
+	})
+}
+
+func TestTraceAnchorsWithGitDivergentBranches(t *testing.T) {
+	mergeBaseCalled := false
 	mock := &mockGitOps{
-		isAncestorFn: func(a, d string) (bool, error) {
-			calls++
-			return a == "commit1", nil
+		repoDir: "/repo",
+		isAncestorFn: func(ancestor, descendant string) (bool, error) {
+			// Simulate divergent branches: neither commit is ancestor of the other
+			return false, nil
+		},
+		mergeBaseFn: func(c1, c2 string) (string, error) {
+			mergeBaseCalled = true
+			return "common-ancestor", nil
+		},
+		getDiffsFn: func(from, to, file string) ([]Diff, error) {
+			if from != "common-ancestor" {
+				t.Errorf("expected diff from common-ancestor, got %s", from)
+			}
+			return []Diff{}, nil
 		},
 	}
 
-	cached := NewCachedGitOps(mock)
-
-	// First call should hit the mock
-	result1, _ := cached.IsAncestorOf("commit1", "commit2")
-	if !result1 {
-		t.Error("expected true for commit1 -> commit2")
-	}
-	if calls != 1 {
-		t.Errorf("expected 1 call, got %d", calls)
+	anchors := []thread.Anchor{
+		{File: "file.go", Line: 10, Commit: "branch-a-commit"},
 	}
 
-	// Second call with same args should use cache
-	result2, _ := cached.IsAncestorOf("commit1", "commit2")
-	if !result2 {
-		t.Error("expected true for cached result")
-	}
-	if calls != 1 {
-		t.Errorf("expected still 1 call (cached), got %d", calls)
-	}
+	results := TraceAnchorsWithGit(mock, anchors, "branch-b-head")
 
-	// Different args should call mock
-	result3, _ := cached.IsAncestorOf("commit3", "commit2")
-	if result3 {
-		t.Error("expected false for commit3 -> commit2")
+	if !mergeBaseCalled {
+		t.Error("expected MergeBase to be called for divergent branches")
 	}
-	if calls != 2 {
-		t.Errorf("expected 2 calls, got %d", calls)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Error != nil {
+		t.Errorf("unexpected error: %v", results[0].Error)
 	}
 }
 
