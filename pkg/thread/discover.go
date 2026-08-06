@@ -1,7 +1,9 @@
 package thread
 
 import (
+	"encoding/xml"
 	"fmt"
+	"io"
 	"iter"
 	"os"
 	"path/filepath"
@@ -199,17 +201,66 @@ func ThreadTitle(t *Thread) string {
 
 // NextNumber returns the next available thread number for the directory.
 // Scans all existing threads and returns max(number) + 1, or 1 if empty.
+// Uses streaming XML parsing to read only the root element's attributes,
+// avoiding a full unmarshal of each file.
 func NextNumber(dir string) (int, error) {
-	maxNum := 0
-	for info, err := range AllThreads(dir) {
-		if err != nil {
-			return 0, err
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 1, nil
 		}
-		if info.Thread.Number > maxNum {
-			maxNum = info.Thread.Number
+		return 0, fmt.Errorf("reading directory %s: %w", dir, err)
+	}
+
+	maxNum := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".xml") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		num, err := readThreadNumber(path)
+		if err != nil {
+			return 0, fmt.Errorf("reading %s: %w", entry.Name(), err)
+		}
+		if num > maxNum {
+			maxNum = num
 		}
 	}
 	return maxNum + 1, nil
+}
+
+// readThreadNumber extracts just the number attribute from a thread file
+// using streaming XML parsing. Stops after reading the root element's attributes.
+func readThreadNumber(path string) (int, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	dec := xml.NewDecoder(f)
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			return 0, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+		start, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		if start.Name.Local != "nota-thread" {
+			return 0, nil
+		}
+		for _, attr := range start.Attr {
+			if attr.Name.Local == "number" {
+				return strconv.Atoi(attr.Value)
+			}
+		}
+		return 0, nil
+	}
 }
 
 // AllThreads returns an iterator over all threads in dir.

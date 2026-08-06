@@ -1,0 +1,50 @@
+{
+  "id": "PRRT_kwDODKw3uc6GHvL_",
+  "isResolved": true,
+  "isOutdated": true,
+  "subjectType": "LINE",
+  "path": "pkg/cmd/discussion/view/view.go",
+  "diffSide": "RIGHT",
+  "line": null,
+  "originalLine": 249,
+  "startLine": null,
+  "comments": {
+    "totalCount": 2,
+    "nodes": [
+      {
+        "id": "PRRC_kwDODKw3uc7GvMp9",
+        "fullDatabaseId": "3334261373",
+        "author": {
+          "login": "copilot-pull-request-reviewer"
+        },
+        "body": "The error message says \"reply ID\" but `--replies` takes a discussion comment node ID. This can confuse users when the lookup fails.",
+        "createdAt": "2026-06-01T12:54:18Z",
+        "updatedAt": "2026-06-01T12:54:21Z",
+        "lastEditedAt": null,
+        "commit": {
+          "oid": "797effe0295914e03f4b40cb873276da1d3b7e93"
+        },
+        "originalCommit": {
+          "oid": "797effe0295914e03f4b40cb873276da1d3b7e93"
+        }
+      },
+      {
+        "id": "PRRC_kwDODKw3uc7H_pe8",
+        "fullDatabaseId": "3355350972",
+        "author": {
+          "login": "babakks"
+        },
+        "body": "This piece is now deleted.",
+        "createdAt": "2026-06-04T10:39:10Z",
+        "updatedAt": "2026-06-04T10:39:10Z",
+        "lastEditedAt": null,
+        "commit": {
+          "oid": "797effe0295914e03f4b40cb873276da1d3b7e93"
+        },
+        "originalCommit": {
+          "oid": "797effe0295914e03f4b40cb873276da1d3b7e93"
+        }
+      }
+    ]
+  }
+}

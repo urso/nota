@@ -221,8 +221,9 @@ tags:
 > Fixed: added expiry check before storing
 ```
 
-- Named groups produce files like `auth.md`
-- Unnamed comments produce `review-001.md`, `review-002.md`, etc.
+- Named groups produce files like `auth.xml`, and re-extracting the same group overwrites it
+- Unnamed comments produce numbered files like `001-l_a1b2c3d4e5f60718.xml`, sharing one
+  numbering sequence with `nota thread create` so every thread is addressable by number
 - Sections are marked `[resolved]` or `[wontfix]` when addressed
 - File status changes to `resolved` when all sections are complete
 - `depends-on` — list of tracking file stems that should be addressed first

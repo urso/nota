@@ -14,8 +14,12 @@ func TestValidateID(t *testing.T) {
 	}{
 		{"l:0123456789abcdef", false},
 		{"l:abcdef0123456789", false},
-		{"gh:12345", false},
-		{"gh:1", false},
+		{"gh:0123456789abcdef", false},
+		// Thread IDs are always locally generated, so the format is strict:
+		// numeric and opaque node IDs are comment shapes, not thread shapes.
+		{"gh:12345", true},
+		{"gh:1", true},
+		{"gh:PRRC_kwDOAbCdEf", true},
 		{"invalid", true},
 		{"l:short", true},
 		{"l:toolongid1234567890", true},
@@ -35,6 +39,37 @@ func TestValidateID(t *testing.T) {
 	}
 }
 
+func TestValidateCommentID(t *testing.T) {
+	tests := []struct {
+		id      string
+		wantErr bool
+	}{
+		{"l:0123456789abcdef", false},
+		{"gh:0123456789abcdef", false},
+		// Pulled comments carry GitHub node IDs verbatim, in both the legacy
+		// base64 and the current prefixed format.
+		{"gh:PRRC_kwDOAbCdEf12345", false},
+		{"gh:MDI0OlB1bGxSZXF1ZXN0UmV2aWV3Q29tbWVudDEyMw==", false},
+		{"gh:12345", false},
+		{"gh:abc", false},
+		{"gh:", true},
+		{"invalid", true},
+		{"l:short", true},
+		{"x:0123456789abcdef", true},
+		{"gh:has spaces", true},
+		{"", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			err := ValidateCommentID(tt.id)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateCommentID(%q) error = %v, wantErr = %v", tt.id, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestFilename(t *testing.T) {
 	tests := []struct {
 		name string
@@ -44,17 +79,22 @@ func TestFilename(t *testing.T) {
 		{
 			name: "without group",
 			th:   &Thread{ID: "l:0123456789abcdef", Number: 1},
-			want: "001-0123456789abcdef.xml",
+			want: "001-l_0123456789abcdef.xml",
 		},
 		{
 			name: "with group",
 			th:   &Thread{ID: "l:0123456789abcdef", Number: 42, Group: "pr-123"},
-			want: "pr-123-042-0123456789abcdef.xml",
+			want: "pr-123-042-l_0123456789abcdef.xml",
 		},
 		{
 			name: "three digit number",
 			th:   &Thread{ID: "l:0123456789abcdef", Number: 123},
-			want: "123-0123456789abcdef.xml",
+			want: "123-l_0123456789abcdef.xml",
+		},
+		{
+			name: "github prefix is translated like any other namespace",
+			th:   &Thread{ID: "gh:0123456789abcdef", Number: 7, Group: "pr-487"},
+			want: "pr-487-007-gh_0123456789abcdef.xml",
 		},
 	}
 

@@ -36,9 +36,9 @@ func main() {
 
 	// Create anchor at line 5
 	anchor := thread.Anchor{
-		File:        "test.go",
-		Line:        5,
-		Commit:      commit1,
+		File:   "test.go",
+		Line:   5,
+		Commit: commit1,
 		ContentHash: computeContentHash([]byte(`package main
 
 func main() {
@@ -172,7 +172,8 @@ line3
 
 	// git log --follow tracks renames, so the anchor should update to new filename.
 	// If rename tracking fails, the anchor is marked outdated (acceptable fallback
-	// since the old file no longer exists). Either outcome is valid.
+	// since the old file no longer exists). Git rename detection can vary by version
+	// and similarity threshold, so both outcomes are valid for this integration test.
 	if result.Anchor.File == "new.go" {
 		// Rename was followed successfully
 		if result.Anchor.Line != 2 {

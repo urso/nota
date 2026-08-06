@@ -3,9 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -15,6 +18,7 @@ import (
 	"github.com/urso/nota/pkg/formatter"
 	"github.com/urso/nota/pkg/grouper"
 	"github.com/urso/nota/pkg/parser"
+	"github.com/urso/nota/pkg/thread"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1227,21 +1231,17 @@ func second() {}
 		t.Fatal(err)
 	}
 
-	// Unnamed groups should produce review-001.xml, review-002.xml.
-	f1 := filepath.Join(outDir, "review-001.xml")
-	f2 := filepath.Join(outDir, "review-002.xml")
-
-	c1, err := os.ReadFile(f1)
-	if err != nil {
-		t.Fatalf("expected review-001.xml: %v", err)
-	}
-	c2, err := os.ReadFile(f2)
-	if err != nil {
-		t.Fatalf("expected review-002.xml: %v", err)
+	// Unnamed groups use the shared thread filename scheme and get numbers 1 and 2.
+	files := unnamedThreadFiles(t, outDir)
+	if len(files) != 2 {
+		t.Fatalf("expected 2 unnamed thread files, got %d: %v", len(files), files)
 	}
 
-	// Each should be valid XML with status="open" and no group attribute.
-	for _, c := range [][]byte{c1, c2} {
+	for _, name := range files {
+		c, err := os.ReadFile(filepath.Join(outDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
 		s := string(c)
 		if !strings.Contains(s, `status="open"`) {
 			t.Error("missing status=open")
@@ -1250,6 +1250,48 @@ func second() {}
 			t.Error("unnamed group should not have group attribute")
 		}
 	}
+
+	// Numbers are assigned from the shared sequence and stored on the thread,
+	// so extracted threads are addressable by number like any other.
+	if got := threadNumbers(t, outDir); !slices.Equal(got, []int{1, 2}) {
+		t.Errorf("expected thread numbers [1 2], got %v", got)
+	}
+}
+
+// unnamedThreadFiles returns the names of thread files following the
+// [group-]NNN-<prefix>_<id>.xml scheme used for unnamed groups.
+func unnamedThreadFiles(t *testing.T, dir string) []string {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	re := regexp.MustCompile(`^\d{3}-(l|gh)_[0-9a-f]{16}\.xml$`)
+	var names []string
+	for _, e := range entries {
+		if re.MatchString(e.Name()) {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// threadNumbers returns the sorted Number of every thread in dir.
+func threadNumbers(t *testing.T, dir string) []int {
+	t.Helper()
+
+	var nums []int
+	for info, err := range thread.AllThreads(dir) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		nums = append(nums, info.Thread.Number)
+	}
+	sort.Ints(nums)
+	return nums
 }
 
 func TestExtractDirOverwritesExistingXML(t *testing.T) {
@@ -1335,9 +1377,12 @@ func newFunc() {}
 func TestExtractDirReviewNumbering(t *testing.T) {
 	outDir := t.TempDir()
 
-	// Pre-create review-001.xml and review-003.xml.
-	for _, name := range []string{"review-001.xml", "review-003.xml"} {
-		if err := os.WriteFile(filepath.Join(outDir, name), []byte(`<?xml version="1.0"?><nota-thread status="open"/>`), 0o644); err != nil {
+	// Pre-create threads numbered 1 and 3. Extract shares one numbering
+	// sequence with thread.Create, so it must continue past the highest.
+	for i, num := range []int{1, 3} {
+		xml := fmt.Sprintf(`<?xml version="1.0"?><nota-thread number="%d" status="open"><nota-comment id="l:%016x" author="user"><nota-body time="t"><![CDATA[existing]]></nota-body></nota-comment></nota-thread>`, num, i)
+		name := fmt.Sprintf("%03d-l_%016x.xml", num, i)
+		if err := os.WriteFile(filepath.Join(outDir, name), []byte(xml), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1360,10 +1405,41 @@ func hello() {}
 		t.Fatal(err)
 	}
 
-	// Should use review-004.xml (max existing is 003).
-	f := filepath.Join(outDir, "review-004.xml")
-	if _, err := os.Stat(f); os.IsNotExist(err) {
-		t.Error("expected review-004.xml to be created")
+	// Should use number 4 (max existing is 3).
+	if got := threadNumbers(t, outDir); !slices.Equal(got, []int{1, 3, 4}) {
+		t.Errorf("expected thread numbers [1 3 4], got %v", got)
+	}
+}
+
+// TestExtractDirNumberingSharedWithThreadCreate guards the bug this scheme
+// fixes: two independent counters could hand the same number to an extracted
+// and a created thread, making "nota thread show N" ambiguous.
+func TestExtractDirNumberingSharedWithThreadCreate(t *testing.T) {
+	outDir := t.TempDir()
+
+	if _, err := thread.Create(outDir, thread.CreateOpts{Message: "created first", Author: "user"}); err != nil {
+		t.Fatal(err)
+	}
+
+	srcDir := t.TempDir()
+	goFile := writeTestFile(t, srcDir, "code.go", `package main
+
+// review: extracted second
+func hello() {}
+`)
+
+	comments, fileContents, _, _, _, err := extract.ProcessFiles(slices.Values([]string{goFile}), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	groups := grouper.GroupComments(comments, fileContents, 2)
+	if err := extract.WriteThreadFiles(outDir, groups, fileContents); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := threadNumbers(t, outDir); !slices.Equal(got, []int{1, 2}) {
+		t.Errorf("expected distinct numbers [1 2], got %v", got)
 	}
 }
 
@@ -1391,14 +1467,20 @@ func other() {}
 		t.Fatal(err)
 	}
 
-	// Named group produces api.xml.
+	// Named group keeps its stable {name}.xml filename, which is what gives
+	// re-extraction its overwrite semantics.
 	if _, err := os.Stat(filepath.Join(outDir, "api.xml")); os.IsNotExist(err) {
 		t.Error("expected api.xml")
 	}
 
-	// Unnamed group produces review-001.xml.
-	if _, err := os.Stat(filepath.Join(outDir, "review-001.xml")); os.IsNotExist(err) {
-		t.Error("expected review-001.xml")
+	// Unnamed group uses the numbered thread filename scheme.
+	if files := unnamedThreadFiles(t, outDir); len(files) != 1 {
+		t.Errorf("expected 1 unnamed thread file, got %d: %v", len(files), files)
+	}
+
+	// Named groups stay unnumbered, so they do not consume the sequence.
+	if got := threadNumbers(t, outDir); !slices.Equal(got, []int{0, 1}) {
+		t.Errorf("expected numbers [0 1] (named unnumbered, unnamed numbered), got %v", got)
 	}
 }
 

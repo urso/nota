@@ -323,6 +323,41 @@ EOF
   write_thread "l:0001000100010001" "open" "review" "Original"
   run bash -c "cd '$tmpdir' && echo 'Stdin message' | bash '$SCRIPT_DIR/thread-add.sh' l:0001000100010001 --file=-"
   [ "$status" -eq 0 ]
+
+  # Verify the stdin content was recorded
+  run bash -c "cd '$tmpdir' && cat .nota/*.xml"
+  [[ "$output" == *"Stdin message"* ]]
+}
+
+@test "thread-add: records author as agent by default" {
+  write_thread "l:0001000100010001" "open" "review" "Original"
+  run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/thread-add.sh' l:0001000100010001 'Agent reply'"
+  [ "$status" -eq 0 ]
+
+  run bash -c "cd '$tmpdir' && cat .nota/*.xml"
+  [[ "$output" == *'author="agent"'* ]]
+}
+
+@test "thread-add: --human records author as the git user" {
+  write_thread "l:0001000100010001" "open" "review" "Original"
+  run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/thread-add.sh' --human l:0001000100010001 'Human reply'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Added comment"* ]]
+
+  # The new comment must not be attributed to the agent.
+  run bash -c "cd '$tmpdir' && cat .nota/*.xml"
+  [[ "$output" != *'author="agent"'* ]]
+}
+
+@test "thread-add: --human still passes through other flags" {
+  write_thread "l:0001000100010001" "open" "review" "Original"
+  run bash -c "cd '$tmpdir' && echo 'Stdin human' | bash '$SCRIPT_DIR/thread-add.sh' --human l:0001000100010001 --file=-"
+  [ "$status" -eq 0 ]
+
+  run bash -c "cd '$tmpdir' && cat .nota/*.xml"
+  [[ "$output" == *"Stdin human"* ]]
+  # The comment must not be attributed to the agent when --human is used.
+  [[ "$output" != *'author="agent"'* ]]
 }
 
 # ============================================================
@@ -362,6 +397,15 @@ EOF
   run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/thread-spawn.sh' l:0000000000000000 'Child'"
   [ "$status" -eq 1 ]
   [[ "$output" == *"not found"* ]]
+}
+
+@test "thread-spawn: records author as agent by default" {
+  write_thread "l:aabbccddaabbccdd" "open" "review" "Parent thread" "mygroup"
+  run bash -c "cd '$tmpdir' && bash '$SCRIPT_DIR/thread-spawn.sh' l:aabbccddaabbccdd 'Child concern'"
+  [ "$status" -eq 0 ]
+
+  run bash -c "cd '$tmpdir' && grep -l 'Child concern' .nota/*.xml | xargs cat"
+  [[ "$output" == *'author="agent"'* ]]
 }
 
 @test "thread-spawn: child inherits group from parent" {

@@ -1,0 +1,33 @@
+{
+  "id": "PRRT_kwDOAToIks6V0gPj",
+  "isResolved": false,
+  "isOutdated": false,
+  "subjectType": "FILE",
+  "path": "staging/src/k8s.io/apiserver/pkg/util/webhook/client_test.go",
+  "diffSide": "RIGHT",
+  "line": 1,
+  "originalLine": 1,
+  "startLine": null,
+  "comments": {
+    "totalCount": 1,
+    "nodes": [
+      {
+        "id": "PRRC_kwDOAToIks7cjqv4",
+        "fullDatabaseId": "3700337656",
+        "author": {
+          "login": "enj"
+        },
+        "body": "See if you can add an integration test in `test/integration/apiserver/egressselector` that exercises this logic.",
+        "createdAt": "2026-08-02T21:27:41Z",
+        "updatedAt": "2026-08-02T21:31:44Z",
+        "lastEditedAt": null,
+        "commit": {
+          "oid": "95cda3f8629a9786c327eb39a2e5e8c431f10cca"
+        },
+        "originalCommit": {
+          "oid": "58b70baa73513137bc0e1131e47700ba7c0d5726"
+        }
+      }
+    ]
+  }
+}

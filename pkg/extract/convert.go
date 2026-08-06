@@ -23,13 +23,16 @@ func splitFileLines(fileContents map[string][]byte) map[string][][]byte {
 // groupToThread converts a grouper.Group to a Thread.
 // commit is the current HEAD SHA to store in anchors.
 // fileLines provides pre-split file lines for computing content hashes.
+// number is the thread number; 0 leaves the thread unnumbered, which is what
+// named groups use since they are addressed by their stable filename instead.
 //
 // Per the design: each @tag(group) entry becomes a separate <nota-comment>
 // with its own <nota-anchor>. The thread-level anchor is set from the first entry.
 // The source tag (e.g. @review, @impl) becomes the thread's goal attribute.
-func groupToThread(g grouper.Group, commit string, fileLines map[string][][]byte) *thread.Thread {
+func groupToThread(g grouper.Group, commit string, fileLines map[string][][]byte, number int) *thread.Thread {
 	t := &thread.Thread{
 		ID:     thread.NewLocalID(),
+		Number: number,
 		Status: "open",
 		Group:  g.Name,
 	}

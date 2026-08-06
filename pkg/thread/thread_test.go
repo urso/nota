@@ -24,10 +24,19 @@ func TestRoundTrip(t *testing.T) {
 				ContentHash: "a1b2c3d4",
 			},
 		},
+		FileAnchors: []FileAnchor{
+			{
+				File:   "handlers/auth.go",
+				Commit: "def456",
+			},
+		},
 		Sync: &SyncConfig{
 			Provider: "github",
 			PR:       "487",
-			ThreadID: "RC_xxx",
+			ThreadID: "PRRT_kwDOAbCdEf",
+			Kind:     SyncKindReviewThread,
+			PRID:     "PR_kwDOAbCdEf",
+			Repo:     "owner/name",
 		},
 		Parent: &Parent{Ref: "pr-487-review"},
 		Refs: []Ref{
@@ -44,9 +53,11 @@ func TestRoundTrip(t *testing.T) {
 				},
 			},
 			{
-				ID:         "gh:1234",
+				ID:         "gh:PRRC_kwDOAbCdEf",
 				Author:     "github:alice",
 				SyncStatus: "pulled",
+				ExternalID: "3334261373",
+				UpdatedAt:  "2026-07-16T10:36:00Z",
 				Bodies: []Body{
 					{Time: "2026-07-16T10:35:00Z", Content: "What about refresh tokens?"},
 				},
@@ -411,6 +422,60 @@ func TestValidateThread(t *testing.T) {
 			wantErr: "ref 0: must have exactly one of thread, file, or link (has 2)",
 		},
 		{
+			name: "sync missing provider",
+			thread: &Thread{
+				Status:   "open",
+				Sync:     &SyncConfig{PR: "487", ThreadID: "PRRT_x"},
+				Comments: []Comment{{ID: "l:1", Author: "u", Bodies: []Body{{Time: "t", Content: "c"}}}},
+			},
+			wantErr: "sync: missing required field: provider",
+		},
+		{
+			name: "sync invalid kind",
+			thread: &Thread{
+				Status:   "open",
+				Sync:     &SyncConfig{Provider: "github", PR: "487", ThreadID: "PRRT_x", Kind: "issue"},
+				Comments: []Comment{{ID: "l:1", Author: "u", Bodies: []Body{{Time: "t", Content: "c"}}}},
+			},
+			wantErr: `sync: invalid kind "issue"`,
+		},
+		{
+			name: "sync missing thread-id defaults to review-thread and is malformed",
+			thread: &Thread{
+				Status:   "open",
+				Sync:     &SyncConfig{Provider: "github", PR: "487"},
+				Comments: []Comment{{ID: "l:1", Author: "u", Bodies: []Body{{Time: "t", Content: "c"}}}},
+			},
+			wantErr: "sync: missing required field: thread-id",
+		},
+		{
+			name: "sync review-thread without thread-id",
+			thread: &Thread{
+				Status:   "open",
+				Sync:     &SyncConfig{Provider: "github", PR: "487", Kind: SyncKindReviewThread},
+				Comments: []Comment{{ID: "l:1", Author: "u", Bodies: []Body{{Time: "t", Content: "c"}}}},
+			},
+			wantErr: "sync: missing required field: thread-id",
+		},
+		{
+			name: "valid sync review-thread",
+			thread: &Thread{
+				Status:   "open",
+				Sync:     &SyncConfig{Provider: "github", PR: "487", ThreadID: "PRRT_kwDO", Kind: SyncKindReviewThread, PRID: "PR_kwDO"},
+				Comments: []Comment{{ID: "l:1", Author: "u", Bodies: []Body{{Time: "t", Content: "c"}}}},
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid sync pr conversation has no thread-id",
+			thread: &Thread{
+				Status:   "open",
+				Sync:     &SyncConfig{Provider: "github", PR: "487", Kind: SyncKindPR, PRID: "PR_kwDO"},
+				Comments: []Comment{{ID: "l:1", Author: "u", Bodies: []Body{{Time: "t", Content: "c"}}}},
+			},
+			wantErr: "",
+		},
+		{
 			name: "valid thread",
 			thread: &Thread{
 				Status:   "open",
@@ -451,6 +516,123 @@ func TestValidateThread(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRoundTripFileAnchors(t *testing.T) {
+	th := &Thread{
+		ID:     "l:fileanchor",
+		Status: "open",
+		Goal:   "review",
+		FileAnchors: []FileAnchor{
+			{File: "handlers/auth.go", Commit: "abc123"},
+		},
+		Comments: []Comment{
+			{ID: "l:c1", Author: "github:alice", Bodies: []Body{{Time: "2026-07-16T10:00:00Z", Content: "This file needs a package doc."}}},
+		},
+	}
+
+	data1, err := MarshalThread(th)
+	if err != nil {
+		t.Fatalf("first marshal failed: %v", err)
+	}
+
+	if !strings.Contains(string(data1), "<nota-anchor-file ") {
+		t.Errorf("expected <nota-anchor-file> element, got:\n%s", data1)
+	}
+
+	th2, err := UnmarshalThread(data1, "test.xml")
+	if err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	data2, err := MarshalThread(th2)
+	if err != nil {
+		t.Fatalf("second marshal failed: %v", err)
+	}
+	if string(data1) != string(data2) {
+		t.Errorf("round-trip mismatch:\n--- first ---\n%s\n--- second ---\n%s", data1, data2)
+	}
+
+	// A file anchor must never be reachable through the tracer's entry point.
+	if th2.CurrentAnchor() != nil {
+		t.Error("file anchor leaked into CurrentAnchor(); it would be traced as a line anchor")
+	}
+	if len(th2.FileAnchors) != 1 || th2.FileAnchors[0].File != "handlers/auth.go" {
+		t.Errorf("file anchor not preserved: %+v", th2.FileAnchors)
+	}
+}
+
+func TestCurrentLocation(t *testing.T) {
+	lineAnchor := Anchor{File: "a.go", Line: 42, Commit: "abc"}
+	fileAnchor := FileAnchor{File: "b.go", Commit: "def"}
+
+	tests := []struct {
+		name     string
+		thread   *Thread
+		wantNil  bool
+		wantFile string
+		wantLine int
+	}{
+		{name: "no anchors", thread: &Thread{}, wantNil: true},
+		{
+			name:     "line anchor only",
+			thread:   &Thread{Anchors: []Anchor{lineAnchor}},
+			wantFile: "a.go",
+			wantLine: 42,
+		},
+		{
+			name:     "file anchor only",
+			thread:   &Thread{FileAnchors: []FileAnchor{fileAnchor}},
+			wantFile: "b.go",
+			wantLine: 0,
+		},
+		{
+			name:     "line anchor wins over file anchor",
+			thread:   &Thread{Anchors: []Anchor{lineAnchor}, FileAnchors: []FileAnchor{fileAnchor}},
+			wantFile: "a.go",
+			wantLine: 42,
+		},
+		{
+			name:     "latest line anchor",
+			thread:   &Thread{Anchors: []Anchor{lineAnchor, {File: "c.go", Line: 7}}},
+			wantFile: "c.go",
+			wantLine: 7,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.thread.CurrentLocation()
+			if tt.wantNil {
+				if got != nil {
+					t.Errorf("expected nil location, got %+v", got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatal("expected a location, got nil")
+			}
+			if got.File != tt.wantFile {
+				t.Errorf("expected file %q, got %q", tt.wantFile, got.File)
+			}
+			if got.Line != tt.wantLine {
+				t.Errorf("expected line %d, got %d", tt.wantLine, got.Line)
+			}
+		})
+	}
+}
+
+func TestNewGitHubID(t *testing.T) {
+	id := NewGitHubID()
+	if err := ValidateID(id); err != nil {
+		t.Errorf("NewGitHubID() produced %q, which fails ValidateID: %v", id, err)
+	}
+	if !strings.HasPrefix(id, "gh:") {
+		t.Errorf("expected ID to start with 'gh:', got %q", id)
+	}
+	if id == NewGitHubID() {
+		t.Error("expected distinct IDs across calls")
 	}
 }
 

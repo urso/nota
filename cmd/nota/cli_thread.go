@@ -73,11 +73,20 @@ func (c *ThreadListCmd) run(w io.Writer, root string) error {
 	return nil
 }
 
+// Author selectors for thread show --authors.
+const (
+	authorsAll    = "all"
+	authorsHumans = "humans"
+	authorsBots   = "bots"
+)
+
 // ThreadShowCmd displays a thread.
 type ThreadShowCmd struct {
-	ID   string `arg:"" required:"" help:"Thread ID"`
-	Raw  bool   `help:"Output XML source"`
-	JSON bool   `name:"json" help:"Output JSON"`
+	ID      string `arg:"" required:"" help:"Thread ID"`
+	Raw     bool   `help:"Output XML source"`
+	JSON    bool   `name:"json" help:"Output JSON"`
+	Authors string `default:"all" enum:"all,humans,bots" help:"Which comment authors to show (all, humans, bots)"`
+	Limit   int    `help:"Show only the last N comments (0 = unbounded); the first comment is always shown"`
 }
 
 func (c *ThreadShowCmd) Run() error {
@@ -120,7 +129,7 @@ func (c *ThreadShowCmd) run(w io.Writer, root string) error {
 		return enc.Encode(info.Thread)
 	}
 
-	return renderThreadTo(w, info.Thread)
+	return renderThreadTo(w, info.Thread, renderOpts{Authors: c.Authors, Limit: c.Limit})
 }
 
 // traceThreadAnchors traces all anchors in a thread to HEAD, using backtracking
@@ -161,7 +170,14 @@ func traceThreadAnchors(root string, t *thread.Thread) bool {
 	return updated
 }
 
-func renderThreadTo(w io.Writer, t *thread.Thread) error {
+// renderOpts bounds what a thread render includes. The zero value renders
+// every comment, matching an unfiltered read.
+type renderOpts struct {
+	Authors string // all (default), humans, or bots
+	Limit   int    // last N comments; 0 means unbounded
+}
+
+func renderThreadTo(w io.Writer, t *thread.Thread, opts renderOpts) error {
 	fmt.Fprintf(w, "# Thread %s\n\n", t.ID)
 	fmt.Fprintf(w, "Status: %s", t.Status)
 	if t.Goal != "" {
@@ -172,12 +188,18 @@ func renderThreadTo(w io.Writer, t *thread.Thread) error {
 	}
 	fmt.Fprintln(w)
 
-	if anchor := t.CurrentAnchor(); anchor != nil {
-		fmt.Fprintf(w, "Anchor: %s:%d", anchor.File, anchor.Line)
-		if anchor.Commit != "" {
-			fmt.Fprintf(w, " @ %s", anchor.Commit[:min(7, len(anchor.Commit))])
+	if loc := t.CurrentLocation(); loc != nil {
+		// File anchors have Line==0; the absent line number is what
+		// distinguishes them on screen.
+		if loc.Line == 0 {
+			fmt.Fprintf(w, "Anchor: %s", loc.File)
+		} else {
+			fmt.Fprintf(w, "Anchor: %s:%d", loc.File, loc.Line)
 		}
-		if anchor.Outdated {
+		if loc.Commit != "" {
+			fmt.Fprintf(w, " @ %s", loc.Commit[:min(7, len(loc.Commit))])
+		}
+		if loc.Outdated {
 			fmt.Fprintf(w, " [outdated]")
 		}
 		fmt.Fprintln(w)
@@ -185,9 +207,16 @@ func renderThreadTo(w io.Writer, t *thread.Thread) error {
 
 	fmt.Fprintln(w)
 
-	for i, c := range t.Comments {
+	selected, omitted := selectComments(t.Comments, opts)
+
+	for i, c := range selected {
 		if i > 0 {
 			fmt.Fprintln(w, "---")
+		}
+		// The elision marker sits after the opening comment, which is always
+		// rendered: silent truncation is indistinguishable from a short thread.
+		if omitted > 0 && i == 1 {
+			fmt.Fprintf(w, "... %d comments omitted ...\n\n---\n", omitted)
 		}
 		fmt.Fprintf(w, "## %s (%s)\n\n", c.Author, c.ID)
 		if len(c.Bodies) > 0 {
@@ -197,6 +226,62 @@ func renderThreadTo(w io.Writer, t *thread.Thread) error {
 	}
 
 	return nil
+}
+
+// selectComments applies the author filter, then the limit. The first comment
+// of the thread is always retained: on an inline review thread it *is* the
+// review concern, and everything after it responds to that.
+// Returns the comments to render and how many were dropped by the limit.
+func selectComments(comments []thread.Comment, opts renderOpts) (selected []thread.Comment, omitted int) {
+	filtered := comments
+	if opts.Authors != "" && opts.Authors != authorsAll {
+		filtered = filtered[:0:0]
+		for _, c := range comments {
+			if matchesAuthorFilter(c.Author, opts.Authors) {
+				filtered = append(filtered, c)
+			}
+		}
+	}
+
+	if opts.Limit <= 0 || len(filtered) <= opts.Limit {
+		return filtered, 0
+	}
+
+	tail := filtered[len(filtered)-opts.Limit:]
+
+	// The opening comment survives the limit regardless of author filter; it
+	// sets context for the thread even when viewing only bot or human replies.
+	first := comments[0]
+	if len(tail) > 0 && tail[0].ID == first.ID {
+		return tail, len(filtered) - len(tail)
+	}
+
+	head := []thread.Comment{first}
+	// Anything dropped between the opening comment and the tail, counted over
+	// the filtered set so the number matches what a wider limit would reveal.
+	omitted = len(filtered) - len(tail)
+	if matchesAuthorFilter(first.Author, opts.Authors) || opts.Authors == "" || opts.Authors == authorsAll {
+		omitted--
+	}
+
+	return append(head, tail...), omitted
+}
+
+// matchesAuthorFilter reports whether an author passes the given selector.
+// Bots are identified by GitHub's own "[bot]" login suffix.
+func matchesAuthorFilter(author, selector string) bool {
+	switch selector {
+	case authorsBots:
+		return isBotAuthor(author)
+	case authorsHumans:
+		return !isBotAuthor(author)
+	default:
+		return true
+	}
+}
+
+func isBotAuthor(author string) bool {
+	return strings.HasSuffix(author, "[bot]")
 }
 
 // AgentAuthor is the author recorded for comments written by an AI agent.
