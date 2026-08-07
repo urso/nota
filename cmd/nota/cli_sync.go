@@ -41,7 +41,7 @@ func (c *SyncPullCmd) run(stdout, stderr io.Writer, root string) error {
 
 	pr := c.PR
 	if pr == 0 {
-		detector := ghapi.NewPRDetector(repo)
+		detector := ghapi.NewPRDetector()
 		detected, err := detector.DetectPR()
 		if err != nil {
 			if ghapi.IsNoPR(err) {

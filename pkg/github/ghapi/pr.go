@@ -27,22 +27,17 @@ func IsNoPR(err error) bool {
 }
 
 // ghPRDetector detects PRs by shelling out to `gh pr view`.
-type ghPRDetector struct {
-	repo Repo
-}
+type ghPRDetector struct{}
 
 // NewPRDetector creates a PRDetector that uses `gh pr view` for detection.
-func NewPRDetector(repo Repo) PRDetector {
-	return &ghPRDetector{repo: repo}
+// Detection relies on gh's own branch-to-PR resolution, which handles forks
+// and tracking branches better than an explicit --repo flag.
+func NewPRDetector() PRDetector {
+	return &ghPRDetector{}
 }
 
 func (d *ghPRDetector) DetectPR() (int, error) {
-	args := []string{"pr", "view", "--json", "number"}
-	if d.repo.Owner != "" {
-		args = append(args, "--repo", d.repo.String())
-	}
-
-	cmd := exec.Command("gh", args...)
+	cmd := exec.Command("gh", "pr", "view", "--json", "number")
 	output, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
