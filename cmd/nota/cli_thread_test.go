@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -17,6 +19,24 @@ func setupThreadTestDir(t *testing.T) string {
 	notaDir := filepath.Join(dir, ".nota")
 	if err := os.MkdirAll(notaDir, 0o755); err != nil {
 		t.Fatal(err)
+	}
+	return dir
+}
+
+func setupThreadTestDirWithGit(t *testing.T) string {
+	t.Helper()
+	dir := setupThreadTestDir(t)
+	cmds := [][]string{
+		{"git", "init"},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
 	}
 	return dir
 }
@@ -136,6 +156,80 @@ func TestThreadListCmd(t *testing.T) {
 	}
 }
 
+func TestThreadListCmd_JSON(t *testing.T) {
+	dir := setupThreadTestDirWithGit(t)
+
+	threads := []*thread.Thread{
+		{
+			ID: "l:json000100010001", Number: 1, Status: "open", Goal: "review",
+			Tags:    "bug,urgent",
+			Anchors: []thread.Anchor{{File: "main.go", Line: 10}},
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "First thread"}},
+			}},
+		},
+		{
+			ID: "l:json000200020002", Number: 2, Status: "open", Goal: "impl",
+			Anchors: []thread.Anchor{{File: "other.go", Line: 20}},
+			Comments: []thread.Comment{{
+				ID: "l:c002c002c002c002", Author: "bob",
+				Bodies: []thread.Body{{Time: "2026-07-21T00:00:00Z", Content: "Second thread"}},
+			}},
+		},
+	}
+
+	for _, th := range threads {
+		createTestThread(t, dir, th)
+	}
+
+	t.Run("json output", func(t *testing.T) {
+		cmd := ThreadListCmd{JSON: true}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		var result []map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+		if len(result) != 2 {
+			t.Errorf("expected 2 threads, got %d", len(result))
+		}
+		if result[0]["id"] != "l:json000100010001" {
+			t.Errorf("first thread id = %v, want l:json000100010001", result[0]["id"])
+		}
+		if result[1]["id"] != "l:json000200020002" {
+			t.Errorf("second thread id = %v, want l:json000200020002", result[1]["id"])
+		}
+		if _, ok := result[0]["tags"].([]any); !ok {
+			t.Errorf("tags should be array, got %T", result[0]["tags"])
+		}
+		if result[0]["title"] != "First thread" {
+			t.Errorf("first thread title = %v, want First thread", result[0]["title"])
+		}
+	})
+
+	t.Run("file filter", func(t *testing.T) {
+		cmd := ThreadListCmd{File: "main.go"}
+		var buf bytes.Buffer
+		err := cmd.run(&buf, dir)
+		if err != nil {
+			t.Fatalf("run() failed: %v", err)
+		}
+
+		out := buf.String()
+		if !strings.Contains(out, "l:json000100010001") {
+			t.Errorf("output should contain thread anchored to main.go\ngot: %s", out)
+		}
+		if strings.Contains(out, "l:json000200020002") {
+			t.Errorf("output should not contain thread anchored to other.go\ngot: %s", out)
+		}
+	})
+}
+
 func TestThreadShowCmd(t *testing.T) {
 	dir := setupThreadTestDir(t)
 
@@ -193,19 +287,41 @@ func TestThreadShowCmd(t *testing.T) {
 	})
 
 	t.Run("json output", func(t *testing.T) {
-		cmd := ThreadShowCmd{ID: th.ID, JSON: true}
+		// JSON output uses service layer which requires git
+		gitDir := setupThreadTestDirWithGit(t)
+		jsonThread := &thread.Thread{
+			ID:      "l:jsontest12345678",
+			Number:  1,
+			Status:  "open",
+			Goal:    "review",
+			Tags:    "tag1,tag2",
+			Anchors: []thread.Anchor{{File: "main.go", Line: 42}},
+			Comments: []thread.Comment{{
+				ID: "l:c001c001c001c001", Author: "alice",
+				Bodies: []thread.Body{{Time: "2026-07-21T10:00:00Z", Content: "Test title\n\nBody"}},
+			}},
+		}
+		createTestThread(t, gitDir, jsonThread)
+
+		cmd := ThreadShowCmd{ID: jsonThread.ID, JSON: true}
 		var buf bytes.Buffer
-		err := cmd.run(&buf, dir)
+		err := cmd.run(&buf, gitDir)
 		if err != nil {
 			t.Fatalf("run() failed: %v", err)
 		}
 
 		out := buf.String()
-		if !strings.Contains(out, `"id": "l:showtest12345678"`) {
+		if !strings.Contains(out, `"id": "l:jsontest12345678"`) {
 			t.Errorf("JSON should contain id field\ngot: %s", out)
 		}
 		if !strings.Contains(out, `"status": "open"`) {
 			t.Errorf("JSON should contain status field\ngot: %s", out)
+		}
+		if !strings.Contains(out, `"title": "Test title"`) {
+			t.Errorf("JSON should contain title field\ngot: %s", out)
+		}
+		if !strings.Contains(out, `"tags": [`) {
+			t.Errorf("JSON should contain tags as array\ngot: %s", out)
 		}
 	})
 
