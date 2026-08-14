@@ -19,7 +19,7 @@ clean:
 	rm -f nota
 
 nvim-lint:
-	cd nvim && selene .
+	cd nvim && selene lua/
 
 nvim-check:
 	cd nvim && lua-language-server --configpath "$$(pwd)/.luarc.json" --check lua/

@@ -1,3 +1,9 @@
+-- Transport layer for nota daemon communication.
+-- All callbacks from libuv (stdout, exit) are wrapped with vim.schedule,
+-- so all dispatched handlers — notification handlers, request callbacks,
+-- and coroutine resumes — run in the main Neovim event loop, never in
+-- fast event context. Higher layers can safely call buffer/mark APIs.
+
 local config = require('nota.config')
 
 local M = {}
@@ -11,6 +17,9 @@ local STATE_ERROR = 'error'
 
 local MAX_ATTEMPTS = 3
 local RETRY_DELAYS = { 0, 500, 2000 }
+local DEFAULT_TIMEOUT_MS = 30000
+
+local notification_handlers = {}
 
 local function get_repo_root()
   local result = vim.fn.systemlist('git rev-parse --show-toplevel')
@@ -40,6 +49,8 @@ local function new_connection()
     state = STATE_IDLE,
     attempts = 0,
     buffer = '',
+    next_id = 0,
+    pending = {},
     on_message = nil,
     on_exit = nil,
   }
@@ -82,6 +93,19 @@ local function handle_exit(repo)
         conn.stdout = nil
       end
       conn.handle = nil
+
+      for _, req in pairs(conn.pending) do
+        if req.timer then
+          req.timer:stop()
+          req.timer:close()
+        end
+        if req.thread then
+          coroutine.resume(req.thread, nil, 'connection closed')
+        elseif req.callback then
+          req.callback('connection closed', nil)
+        end
+      end
+      conn.pending = {}
 
       if conn.on_exit then
         conn.on_exit(code, signal)
@@ -135,12 +159,43 @@ local function handle_stdout(repo)
         local line = conn.buffer:sub(1, newline - 1)
         conn.buffer = conn.buffer:sub(newline + 1)
 
-        if line ~= '' and conn.on_message then
+        if line ~= '' then
           local ok, decoded = pcall(vim.json.decode, line)
-          if ok then
-            conn.on_message(decoded)
-          else
+          if not ok then
             vim.notify('nota: invalid JSON: ' .. line, vim.log.levels.WARN)
+          elseif decoded.id ~= nil then
+            local req = conn.pending[decoded.id]
+            if req then
+              conn.pending[decoded.id] = nil
+              if req.timer then
+                req.timer:stop()
+                req.timer:close()
+              end
+              if req.thread then
+                if decoded.error then
+                  coroutine.resume(req.thread, nil, decoded.error)
+                else
+                  coroutine.resume(req.thread, decoded.result, nil)
+                end
+              elseif req.callback then
+                if decoded.error then
+                  req.callback(decoded.error, nil)
+                else
+                  req.callback(nil, decoded.result)
+                end
+              end
+            end
+          elseif decoded.method then
+            local handler = notification_handlers[decoded.method]
+            if handler then
+              local handler_ok, handler_err = pcall(handler, decoded.params)
+              if not handler_ok then
+                vim.notify('nota: notification handler error: ' .. tostring(handler_err), vim.log.levels.WARN)
+              end
+            end
+          end
+          if conn.on_message then
+            conn.on_message(decoded)
           end
         end
       end
@@ -245,6 +300,19 @@ function M.reset(repo)
     conn.handle = nil
   end
 
+  for _, req in pairs(conn.pending) do
+    if req.timer then
+      req.timer:stop()
+      req.timer:close()
+    end
+    if req.thread then
+      coroutine.resume(req.thread, nil, 'connection reset')
+    elseif req.callback then
+      req.callback('connection reset', nil)
+    end
+  end
+  conn.pending = {}
+
   conn.state = STATE_IDLE
   conn.attempts = 0
   conn.buffer = ''
@@ -331,6 +399,108 @@ function M.send(repo, message)
   end)
 
   return true
+end
+
+function M.request(repo, method, params, callback)
+  repo = repo or get_repo_root()
+
+  local co = coroutine.running()
+  local use_coroutine = co ~= nil and callback == nil
+
+  if not repo then
+    local err_msg = 'not a git repository'
+    if use_coroutine then
+      error(err_msg)
+    end
+    if callback then
+      callback(err_msg, nil)
+    end
+    return nil, err_msg
+  end
+
+  local conn, err = M.get_connection(repo)
+  if not conn then
+    if use_coroutine then
+      error(err)
+    end
+    if callback then
+      callback(err, nil)
+    end
+    return nil, err
+  end
+
+  local id = conn.next_id
+  conn.next_id = conn.next_id + 1
+
+  local message = {
+    jsonrpc = '2.0',
+    id = id,
+    method = method,
+    params = params,
+  }
+
+  local timer = vim.uv.new_timer()
+  timer:start(DEFAULT_TIMEOUT_MS, 0, function()
+    vim.schedule(function()
+      local req = conn.pending[id]
+      if req then
+        conn.pending[id] = nil
+        if req.timer then
+          req.timer:stop()
+          req.timer:close()
+        end
+        if req.thread then
+          coroutine.resume(req.thread, nil, 'request timeout')
+        elseif req.callback then
+          req.callback('request timeout', nil)
+        end
+      end
+    end)
+  end)
+
+  if use_coroutine then
+    conn.pending[id] = {
+      thread = co,
+      timer = timer,
+    }
+  else
+    conn.pending[id] = {
+      callback = callback,
+      timer = timer,
+    }
+  end
+
+  local ok, send_err = M.send(repo, message)
+  if not ok then
+    conn.pending[id] = nil
+    timer:stop()
+    timer:close()
+    if use_coroutine then
+      error(send_err)
+    end
+    if callback then
+      callback(send_err, nil)
+    end
+    return nil, send_err
+  end
+
+  if use_coroutine then
+    local result, resume_err = coroutine.yield()
+    if resume_err then
+      error(resume_err)
+    end
+    return result
+  end
+
+  return id
+end
+
+function M.on_notification(method, handler)
+  notification_handlers[method] = handler
+end
+
+function M.off_notification(method)
+  notification_handlers[method] = nil
 end
 
 return M
