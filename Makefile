@@ -1,4 +1,4 @@
-.PHONY: all build fmt check test clean
+.PHONY: all build fmt check test clean nvim-lint nvim-check
 
 all: fmt build test
 
@@ -17,3 +17,9 @@ test:
 
 clean:
 	rm -f nota
+
+nvim-lint:
+	cd nvim && selene .
+
+nvim-check:
+	cd nvim && lua-language-server --configpath "$$(pwd)/.luarc.json" --check lua/
