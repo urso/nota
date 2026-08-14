@@ -1,4 +1,4 @@
-.PHONY: all build fmt check test clean nvim-lint nvim-check
+.PHONY: all build fmt check test clean nvim-lint nvim-check nvim-test
 
 all: fmt build test
 
@@ -23,3 +23,6 @@ nvim-lint:
 
 nvim-check:
 	cd nvim && lua-language-server --configpath "$$(pwd)/.luarc.json" --check lua/
+
+nvim-test:
+	cd nvim && nvim --headless --clean -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
