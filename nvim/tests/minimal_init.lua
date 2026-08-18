@@ -10,3 +10,4 @@ end
 vim.opt.rtp:prepend(root)
 vim.opt.rtp:prepend(plenary_path)
 vim.cmd('runtime plugin/plenary.vim')
+
