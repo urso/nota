@@ -25,4 +25,4 @@ nvim-check:
 	cd nvim && lua-language-server --configpath "$$(pwd)/.luarc.json" --check lua/
 
 nvim-test:
-	cd nvim && nvim --headless --clean -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
+	./nvim/run-tests.sh
