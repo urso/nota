@@ -5,6 +5,7 @@
 -- fast event context. Higher layers can safely call buffer/mark APIs.
 
 local config = require('nota.config')
+local repo_utils = require('nota.repo')
 
 local M = {}
 
@@ -22,11 +23,7 @@ local DEFAULT_TIMEOUT_MS = 30000
 local notification_handlers = {}
 
 local function get_repo_root()
-  local result = vim.fn.systemlist('git rev-parse --show-toplevel')
-  if vim.v.shell_error ~= 0 or #result == 0 then
-    return nil
-  end
-  return result[1]
+  return repo_utils.get_root()
 end
 
 local function resolve_binary()
