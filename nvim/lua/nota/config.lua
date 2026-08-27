@@ -2,6 +2,8 @@ local M = {}
 
 local defaults = {
   binary = nil,
+  show_statuses = { 'open' },
+  inline_scope = 'off',
 }
 
 M._config = vim.deepcopy(defaults)
