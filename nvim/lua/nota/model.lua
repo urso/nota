@@ -1,11 +1,12 @@
--- Model layer for per-buffer thread state.
--- Holds threads anchored in attached buffers, manages extmarks, emits change events.
+-- Model layer for thread state.
+-- Maintains a repo-level thread cache and per-buffer extmark tracking.
 
 local client = require('nota.client')
 local repo_utils = require('nota.repo')
 
 local M = {}
 
+local repos = {}
 local buffers = {}
 local subscribers = {}
 local ns = vim.api.nvim_create_namespace('nota')
@@ -16,12 +17,41 @@ function M._reset()
       vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
     end
   end
+  repos = {}
   buffers = {}
   subscribers = {}
 end
 
 function M._get_namespace()
   return ns
+end
+
+local function get_or_create_repo_state(repo)
+  if not repos[repo] then
+    repos[repo] = {
+      threads = {},
+      threads_by_id = {},
+      threads_by_file = {},
+      generation = 0,
+      loaded = false,
+    }
+  end
+  return repos[repo]
+end
+
+local function index_threads(repo_state)
+  repo_state.threads_by_id = {}
+  repo_state.threads_by_file = {}
+  for _, thread in ipairs(repo_state.threads) do
+    repo_state.threads_by_id[thread.id] = thread
+    if thread.resolvedAnchor and thread.resolvedAnchor.file then
+      local file = thread.resolvedAnchor.file
+      if not repo_state.threads_by_file[file] then
+        repo_state.threads_by_file[file] = {}
+      end
+      table.insert(repo_state.threads_by_file[file], thread)
+    end
+  end
 end
 
 local function emit_update(bufnr, threads)
@@ -34,18 +64,58 @@ local function emit_update(bufnr, threads)
   end
 end
 
-local function place_marks(bufnr, state)
+local function place_marks(bufnr, buf_state, threads)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
   local line_count = vim.api.nvim_buf_line_count(bufnr)
-  for _, thread in ipairs(state.threads) do
+  for _, thread in ipairs(threads) do
     if thread.resolvedAnchor and thread.resolvedAnchor.line and thread.resolvedAnchor.line > 0 then
       local line = math.max(1, math.min(thread.resolvedAnchor.line, math.max(1, line_count)))
       local mark_id = vim.api.nvim_buf_set_extmark(bufnr, ns, line - 1, 0, {})
-      state.marks[thread.id] = mark_id
+      buf_state.marks[thread.id] = mark_id
     end
   end
+end
+
+local function refresh_repo(repo, callback)
+  local repo_state = get_or_create_repo_state(repo)
+  repo_state.generation = repo_state.generation + 1
+  local gen = repo_state.generation
+
+  vim.schedule(function()
+    local response = client.list(repo, {})
+    if response.err then
+      vim.notify('nota: failed to list threads: ' .. (response.err.message or 'unknown error'), vim.log.levels.WARN)
+      if callback then
+        callback(false)
+      end
+      return
+    end
+    if repos[repo] == repo_state and repo_state.generation == gen then
+      repo_state.threads = response.result or {}
+      repo_state.loaded = true
+      index_threads(repo_state)
+      if callback then
+        callback(true)
+      end
+    end
+  end)
+end
+
+local function update_buffer_marks(bufnr, buf_state)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  local repo_state = repos[buf_state.repo]
+  if not repo_state then
+    return
+  end
+  local threads = repo_state.threads_by_file[buf_state.file] or {}
+  vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+  buf_state.marks = {}
+  place_marks(bufnr, buf_state, threads)
+  emit_update(bufnr, M.get_threads(bufnr))
 end
 
 function M.attach(bufnr)
@@ -71,30 +141,23 @@ function M.attach(bufnr)
 
   local rel_path = repo_utils.get_relative_path(abs_path, repo)
 
-  local state = {
+  local buf_state = {
     repo = repo,
     file = rel_path,
-    threads = {},
     marks = {},
   }
-  buffers[bufnr] = state
+  buffers[bufnr] = buf_state
 
-  local co = coroutine.create(function()
-    local response = client.list(repo, { file = rel_path })
-    if response.err then
-      vim.notify('nota: failed to list threads: ' .. (response.err.message or 'unknown error'), vim.log.levels.WARN)
-      return
-    end
-    if buffers[bufnr] == state then
-      state.threads = response.result or {}
-      place_marks(bufnr, state)
-      emit_update(bufnr, M.get_threads(bufnr))
-    end
-  end)
-
-  vim.schedule(function()
-    coroutine.resume(co)
-  end)
+  local repo_state = get_or_create_repo_state(repo)
+  if repo_state.loaded then
+    update_buffer_marks(bufnr, buf_state)
+  else
+    refresh_repo(repo, function(ok)
+      if ok and buffers[bufnr] == buf_state then
+        update_buffer_marks(bufnr, buf_state)
+      end
+    end)
+  end
 
   return true
 end
@@ -102,8 +165,8 @@ end
 function M.detach(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
 
-  local state = buffers[bufnr]
-  if not state then
+  local buf_state = buffers[bufnr]
+  if not buf_state then
     return false
   end
 
@@ -121,15 +184,17 @@ end
 
 function M.get_state(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local state = buffers[bufnr]
-  if not state then
+  local buf_state = buffers[bufnr]
+  if not buf_state then
     return nil
   end
+  local repo_state = repos[buf_state.repo]
+  local threads = repo_state and repo_state.threads_by_file[buf_state.file] or {}
   return {
-    repo = state.repo,
-    file = state.file,
-    threads = state.threads,
-    marks = state.marks,
+    repo = buf_state.repo,
+    file = buf_state.file,
+    threads = threads,
+    marks = buf_state.marks,
   }
 end
 
@@ -138,44 +203,55 @@ function M._get_state_internal(bufnr)
   return buffers[bufnr]
 end
 
+function M._get_repo_state(repo)
+  return repos[repo]
+end
+
 function M.refresh(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local state = buffers[bufnr]
-  if not state then
+  local buf_state = buffers[bufnr]
+  if not buf_state then
     return false
   end
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return false
   end
 
-  vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-  state.marks = {}
-  state.threads = {}
-
-  local co = coroutine.create(function()
-    local response = client.list(state.repo, { file = state.file })
-    if response.err then
-      vim.notify('nota: refresh failed: ' .. (response.err.message or 'unknown error'), vim.log.levels.WARN)
-      return
+  refresh_repo(buf_state.repo, function(ok)
+    if ok and buffers[bufnr] == buf_state then
+      update_buffer_marks(bufnr, buf_state)
     end
-    if buffers[bufnr] == state then
-      state.threads = response.result or {}
-      place_marks(bufnr, state)
-      emit_update(bufnr, M.get_threads(bufnr))
-    end
-  end)
-
-  vim.schedule(function()
-    coroutine.resume(co)
   end)
 
   return true
 end
 
+local function apply_extmark_positions(bufnr, buf_state, threads)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return {}
+  end
+  local all_marks = vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, {})
+  local mark_rows = {}
+  for _, mark in ipairs(all_marks) do
+    mark_rows[mark[1]] = mark[2]
+  end
+  local result = {}
+  for i, thread in ipairs(threads) do
+    local copy = vim.tbl_extend('force', {}, thread)
+    local mark_id = buf_state.marks[thread.id]
+    if mark_id and mark_rows[mark_id] then
+      local outdated = thread.resolvedAnchor and thread.resolvedAnchor.outdated or false
+      copy.anchor = { line = mark_rows[mark_id] + 1, outdated = outdated }
+    end
+    result[i] = copy
+  end
+  return result
+end
+
 function M.get_threads(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local state = buffers[bufnr]
-  if not state then
+  local buf_state = buffers[bufnr]
+  if not buf_state then
     return {}
   end
 
@@ -183,27 +259,94 @@ function M.get_threads(bufnr)
     return {}
   end
 
-  local all_marks = vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, {})
-  local mark_rows = {}
-  for _, mark in ipairs(all_marks) do
-    mark_rows[mark[1]] = mark[2]
+  local repo_state = repos[buf_state.repo]
+  if not repo_state then
+    return {}
+  end
+
+  local threads = repo_state.threads_by_file[buf_state.file] or {}
+  return apply_extmark_positions(bufnr, buf_state, threads)
+end
+
+function M.get_all_threads(repo)
+  if not repo then
+    local bufnr = vim.api.nvim_get_current_buf()
+    local buf_state = buffers[bufnr]
+    if buf_state then
+      repo = buf_state.repo
+    else
+      repo = repo_utils.get_root(vim.fn.getcwd())
+    end
+  end
+
+  if not repo then
+    return {}
+  end
+
+  local repo_state = repos[repo]
+  if not repo_state or not repo_state.loaded then
+    return {}
+  end
+
+  local file_threads = {}
+  for bufnr, buf_state in pairs(buffers) do
+    if buf_state.repo == repo then
+      local threads = repo_state.threads_by_file[buf_state.file] or {}
+      local with_anchors = apply_extmark_positions(bufnr, buf_state, threads)
+      for _, t in ipairs(with_anchors) do
+        file_threads[t.id] = t
+      end
+    end
   end
 
   local result = {}
-  for _, thread in ipairs(state.threads) do
-    local entry = {
-      id = thread.id,
-      title = thread.title,
-      status = thread.status,
-      resolvedAnchor = thread.resolvedAnchor,
-    }
-    local mark_id = state.marks[thread.id]
-    if mark_id and mark_rows[mark_id] then
-      entry.line = mark_rows[mark_id] + 1
+  for i, thread in ipairs(repo_state.threads) do
+    if file_threads[thread.id] then
+      result[i] = file_threads[thread.id]
+    else
+      local copy = vim.tbl_extend('force', {}, thread)
+      if thread.resolvedAnchor then
+        local outdated = thread.resolvedAnchor.outdated or false
+        local line = thread.resolvedAnchor.line
+        if line and line > 0 then
+          copy.anchor = { line = line, outdated = outdated }
+        end
+      end
+      result[i] = copy
     end
-    table.insert(result, entry)
   end
+
   return result
+end
+
+function M.ensure_loaded(repo, callback)
+  if not repo then
+    local bufnr = vim.api.nvim_get_current_buf()
+    local buf_state = buffers[bufnr]
+    if buf_state then
+      repo = buf_state.repo
+    else
+      repo = repo_utils.get_root(vim.fn.getcwd())
+    end
+  end
+
+  if not repo then
+    if callback then
+      callback(false)
+    end
+    return false
+  end
+
+  local repo_state = repos[repo]
+  if repo_state and repo_state.loaded then
+    if callback then
+      callback(true)
+    end
+    return true
+  end
+
+  refresh_repo(repo, callback)
+  return false
 end
 
 function M.on_update(callback)
@@ -229,18 +372,45 @@ function M.off_update(callback)
   return false
 end
 
-client.on_change(function(params)
+local change_handler_registered = false
+
+local function on_change_handler(params)
   local changed_repo = params.repo
-  local changed_files = params.files or {}
-  local changed_set = {}
-  for _, file in ipairs(changed_files) do
-    changed_set[file] = true
+  if not changed_repo then
+    return
   end
-  for bufnr, state in pairs(buffers) do
-    if state.repo == changed_repo and changed_set[state.file] then
-      M.refresh(bufnr)
+
+  refresh_repo(changed_repo, function(ok)
+    if not ok then
+      return
     end
+    local changed_files = params.files or {}
+    local changed_set = {}
+    for _, file in ipairs(changed_files) do
+      changed_set[file] = true
+    end
+    local bufs_to_update = {}
+    for bufnr, buf_state in pairs(buffers) do
+      if buf_state.repo == changed_repo and changed_set[buf_state.file] then
+        table.insert(bufs_to_update, { bufnr, buf_state })
+      end
+    end
+    for _, entry in ipairs(bufs_to_update) do
+      if buffers[entry[1]] == entry[2] then
+        update_buffer_marks(entry[1], entry[2])
+      end
+    end
+  end)
+end
+
+function M._init()
+  if change_handler_registered then
+    return
   end
-end)
+  change_handler_registered = true
+  client.on_change(on_change_handler)
+end
+
+M._init()
 
 return M
