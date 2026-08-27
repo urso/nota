@@ -84,22 +84,24 @@ local function refresh_repo(repo, callback)
   local gen = repo_state.generation
 
   vim.schedule(function()
-    local response = client.list(repo, {})
-    if response.err then
-      vim.notify('nota: failed to list threads: ' .. (response.err.message or 'unknown error'), vim.log.levels.WARN)
-      if callback then
-        callback(false)
+    coroutine.wrap(function()
+      local response = client.list(repo)
+      if response.err then
+        vim.notify('nota: failed to list threads: ' .. (response.err.message or 'unknown error'), vim.log.levels.WARN)
+        if callback then
+          callback(false)
+        end
+        return
       end
-      return
-    end
-    if repos[repo] == repo_state and repo_state.generation == gen then
-      repo_state.threads = response.result or {}
-      repo_state.loaded = true
-      index_threads(repo_state)
-      if callback then
-        callback(true)
+      if repos[repo] == repo_state and repo_state.generation == gen then
+        repo_state.threads = response.result or {}
+        repo_state.loaded = true
+        index_threads(repo_state)
+        if callback then
+          callback(true)
+        end
       end
-    end
+    end)()
   end)
 end
 

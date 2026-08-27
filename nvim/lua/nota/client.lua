@@ -35,7 +35,7 @@ local function rpc_call(repo, method, params)
 end
 
 function M.list(repo, opts)
-  return rpc_call(repo, 'thread/list', opts or {})
+  return rpc_call(repo, 'thread/list', opts or vim.empty_dict())
 end
 
 function M.get(repo, id)
