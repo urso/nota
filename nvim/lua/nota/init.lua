@@ -24,6 +24,7 @@ local M = {}
 
 local config = require('nota.config')
 local model = require('nota.model')
+local float = require('nota.ui.float')
 
 M.config = config
 
@@ -63,6 +64,26 @@ end
 
 function M.ensure_loaded(repo, callback)
   return model.ensure_loaded(repo, callback)
+end
+
+function M.open_conversation(thread)
+  return float.open_conversation(thread)
+end
+
+function M.open_reply(thread)
+  return float.open_reply(thread)
+end
+
+function M.open_new(opts)
+  return float.open_new(opts)
+end
+
+function M.change_status(thread)
+  return float.change_status(thread)
+end
+
+function M.threads_at_cursor(bufnr)
+  return float.threads_at_cursor(bufnr)
 end
 
 return M

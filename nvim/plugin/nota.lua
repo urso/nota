@@ -70,3 +70,24 @@ vim.api.nvim_create_user_command('NotaShowResolved', function()
   local statuses = display.get_show_statuses()
   vim.notify('nota: showing statuses: ' .. table.concat(statuses, ', '))
 end, { desc = 'Toggle showing resolved nota threads' })
+
+vim.api.nvim_create_user_command('NotaOpen', function()
+  local float = require('nota.ui.float')
+  float.open_conversation()
+end, { desc = 'Open nota conversation at cursor' })
+
+vim.api.nvim_create_user_command('NotaNew', function(opts)
+  local float = require('nota.ui.float')
+  local goal = opts.args ~= '' and opts.args or nil
+  float.open_new({ goal = goal })
+end, { nargs = '?', desc = 'Create new nota thread at cursor' })
+
+vim.api.nvim_create_user_command('NotaReply', function()
+  local float = require('nota.ui.float')
+  float.open_reply()
+end, { desc = 'Reply to nota thread at cursor' })
+
+vim.api.nvim_create_user_command('NotaStatus', function()
+  local float = require('nota.ui.float')
+  float.change_status()
+end, { desc = 'Change nota thread status at cursor' })
