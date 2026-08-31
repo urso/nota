@@ -9,6 +9,14 @@ local repo_utils = require('nota.repo')
 
 local M = {}
 
+M._debug = false
+
+local function debug_log(msg)
+  if M._debug then
+    vim.notify('nota/transport: ' .. msg, vim.log.levels.DEBUG)
+  end
+end
+
 local connections = {}
 
 local STATE_IDLE = 'idle'
@@ -76,6 +84,7 @@ end
 local function handle_exit(repo)
   return function(code, signal)
     vim.schedule(function()
+      debug_log(string.format('daemon exited: code=%s signal=%s repo=%s', tostring(code), tostring(signal), repo))
       local conn = connections[repo]
       if not conn then
         return
@@ -90,6 +99,12 @@ local function handle_exit(repo)
         conn.stdout = nil
       end
       conn.handle = nil
+
+      local pending_count = 0
+      for _ in pairs(conn.pending) do
+        pending_count = pending_count + 1
+      end
+      debug_log(string.format('pending requests: %d', pending_count))
 
       for _, req in pairs(conn.pending) do
         if req.timer then
@@ -157,6 +172,7 @@ local function handle_stdout(repo)
         conn.buffer = conn.buffer:sub(newline + 1)
 
         if line ~= '' then
+          debug_log(string.format('recv: %s', line:sub(1, 200)))
           local ok, decoded = pcall(vim.json.decode, line)
           if not ok then
             vim.notify('nota: invalid JSON: ' .. line, vim.log.levels.WARN)
@@ -266,6 +282,8 @@ function M.spawn(repo)
   conn.stdout = stdout
   conn.state = STATE_CONNECTED
   conn.attempts = 0
+
+  debug_log(string.format('daemon spawned: pid=%s repo=%s', tostring(pid), repo))
 
   stdout:read_start(handle_stdout(repo))
 
@@ -387,6 +405,7 @@ function M.send(repo, message)
   end
 
   local data = encoded .. '\n'
+  debug_log(string.format('send: %s', encoded))
   conn.stdin:write(data, function(err)
     if err then
       vim.schedule(function()

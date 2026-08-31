@@ -11,6 +11,22 @@ local BADGE_OPEN = '●'
 local BADGE_RESOLVED = '○'
 local BADGE_OUTDATED = '◌'
 
+local SIGN_OPEN = 'NotaSignOpen'
+local SIGN_RESOLVED = 'NotaSignResolved'
+local SIGN_OUTDATED = 'NotaSignOutdated'
+
+local signs_defined = false
+
+local function define_signs()
+  if signs_defined then
+    return
+  end
+  signs_defined = true
+  vim.fn.sign_define(SIGN_OPEN, { text = '●', texthl = 'NotaBadge' })
+  vim.fn.sign_define(SIGN_RESOLVED, { text = '○', texthl = 'NotaBadgeResolved' })
+  vim.fn.sign_define(SIGN_OUTDATED, { text = '◌', texthl = 'NotaBadgeOutdated' })
+end
+
 local function define_highlights()
   local existing = vim.api.nvim_get_hl(0, { name = 'NotaBadge' })
   if vim.tbl_isempty(existing) then
@@ -172,11 +188,13 @@ local function format_inline_conversation(thread)
       table.insert(lines, { { prefix, 'NotaInlineSeparator' } })
     end
     local author = comment.author or 'unknown'
-    local time = relative_time(comment.createdAt)
+    local bodies = comment.bodies or {}
+    local first_body = bodies[1]
+    local time = first_body and relative_time(first_body.time) or ''
     local meta = author .. (time ~= '' and (' · ' .. time) or '')
     table.insert(lines, { { prefix, 'NotaInlineSeparator' }, { meta, 'NotaInlineAuthor' } })
 
-    local body = comment.body or ''
+    local body = first_body and first_body.content or ''
     for line in body:gmatch('[^\n]+') do
       table.insert(lines, { { prefix .. '  ', 'NotaInlineSeparator' }, { line, 'NotaInlineBody' } })
     end
@@ -193,9 +211,38 @@ local function get_mark_for_line(bufnr, line)
   return nil
 end
 
+local function get_sign_for_threads(line_threads)
+  local has_outdated = false
+  local has_resolved = false
+  for _, thread in ipairs(line_threads) do
+    if thread.anchor and thread.anchor.outdated then
+      has_outdated = true
+    end
+    if thread.status == 'resolved' then
+      has_resolved = true
+    end
+  end
+  if has_outdated then
+    return SIGN_OUTDATED
+  end
+  if has_resolved then
+    return SIGN_RESOLVED
+  end
+  return SIGN_OPEN
+end
+
 local function render_buffer(bufnr, threads)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
+  end
+
+  local cfg = config.get()
+  local use_eol = cfg.eol_badge ~= false
+  local use_sign = cfg.sign_column == true
+
+  if use_sign then
+    define_signs()
+    vim.fn.sign_unplace('nota', { buffer = bufnr })
   end
 
   local state = get_buffer_state(bufnr)
@@ -215,7 +262,7 @@ local function render_buffer(bufnr, threads)
   for line, line_threads in pairs(by_line) do
     local mark_id = get_mark_for_line(bufnr, line)
     if mark_id then
-      local badge = format_badge(line_threads)
+      local badge = use_eol and format_badge(line_threads) or nil
       local virt_lines = nil
 
       if state.inline_scope == 'buffer' or (state.inline_scope == 'cursor' and line == cursor_line) then
@@ -238,6 +285,11 @@ local function render_buffer(bufnr, threads)
         virt_text_pos = 'eol',
         virt_lines = virt_lines,
       })
+
+      if use_sign then
+        local sign_name = get_sign_for_threads(line_threads)
+        vim.fn.sign_place(0, 'nota', sign_name, bufnr, { lnum = line, priority = 10 })
+      end
     end
   end
 end
@@ -313,6 +365,7 @@ end
 
 function M.cleanup(bufnr)
   buffer_state[bufnr] = nil
+  vim.fn.sign_unplace('nota', { buffer = bufnr })
 end
 
 function M._reset()

@@ -8,13 +8,13 @@ import (
 
 // ThreadViewJSON is the JSON encoding of a ThreadView.
 type ThreadViewJSON struct {
-	ID       string   `json:"id"`
-	Number   int      `json:"number"`
-	Status   string   `json:"status"`
-	Goal     string   `json:"goal,omitempty"`
-	Group    string   `json:"group,omitempty"`
-	Tags     []string `json:"tags,omitempty"`
-	Title    string   `json:"title"`
+	ID       string           `json:"id"`
+	Number   int              `json:"number"`
+	Status   string           `json:"status"`
+	Goal     string           `json:"goal,omitempty"`
+	Group    string           `json:"group,omitempty"`
+	Tags     []string         `json:"tags,omitempty"`
+	Title    string           `json:"title"`
 	Comments []thread.Comment `json:"comments"`
 
 	Anchor         *AnchorJSON         `json:"anchor,omitempty"`

@@ -84,6 +84,20 @@ func TraceAnchor(repoDir string, anchor thread.Anchor, targetCommit string) (Res
 			}, nil
 		}
 
+		if d.Created {
+			// File was created after anchor commit — anchor is invalid
+			return Result{
+				Anchor: thread.Anchor{
+					File:       currentFile,
+					Line:       anchor.Line,
+					Commit:     targetCommit,
+					TracedFrom: anchor.Commit,
+					Outdated:   true,
+				},
+				Outdated: true,
+			}, nil
+		}
+
 		if d.NewName != "" {
 			currentFile = d.NewName
 		}
@@ -248,6 +262,13 @@ func ContentHash(filePath string, line int) (string, error) {
 // Returns an anchor with Commit="" representing uncommitted changes.
 func TraceToWorkingTree(repoDir string, anchor thread.Anchor) (Result, error) {
 	if anchor.Commit == "" {
+		// Normalize path to relative for consistency
+		filePath := anchor.File
+		if filepath.IsAbs(filePath) {
+			if rel, err := filepath.Rel(repoDir, filePath); err == nil {
+				anchor.File = rel
+			}
+		}
 		return Result{Anchor: anchor}, nil
 	}
 
@@ -274,6 +295,21 @@ func TraceToWorkingTree(repoDir string, anchor thread.Anchor) (Result, error) {
 				Anchor: thread.Anchor{
 					File:       currentFile,
 					Line:       currentLine,
+					Commit:     "",
+					TracedFrom: anchor.Commit,
+					Outdated:   true,
+				},
+				Outdated: true,
+			}, nil
+		}
+
+		if d.Created {
+			// File was created after anchor commit — anchor is invalid
+			// Keep original line but mark outdated
+			return Result{
+				Anchor: thread.Anchor{
+					File:       currentFile,
+					Line:       anchor.Line,
 					Commit:     "",
 					TracedFrom: anchor.Commit,
 					Outdated:   true,
@@ -522,6 +558,19 @@ func traceWithDiffsUsingGit(git GitOps, anchor thread.Anchor, targetCommit strin
 				Anchor: thread.Anchor{
 					File:       currentFile,
 					Line:       currentLine,
+					Commit:     targetCommit,
+					TracedFrom: anchor.Commit,
+					Outdated:   true,
+				},
+				Outdated: true,
+			}
+		}
+
+		if d.Created {
+			return Result{
+				Anchor: thread.Anchor{
+					File:       currentFile,
+					Line:       anchor.Line,
 					Commit:     targetCommit,
 					TracedFrom: anchor.Commit,
 					Outdated:   true,

@@ -238,8 +238,8 @@ describe('float', function()
         goal = 'fix bug',
         resolvedAnchor = { file = file, line = 2 },
         comments = {
-          { author = 'alice', body = 'First comment', createdAt = '2024-01-01T10:00:00Z' },
-          { author = 'bob', body = 'Second comment', createdAt = '2024-01-01T11:00:00Z' },
+          { author = 'alice', bodies = { { content = 'First comment', time = '2024-01-01T10:00:00Z' } } },
+          { author = 'bob', bodies = { { content = 'Second comment', time = '2024-01-01T11:00:00Z' } } },
         },
       }
 

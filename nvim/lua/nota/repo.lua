@@ -5,7 +5,12 @@ local M = {}
 function M.get_root(path)
   local cmd = 'git rev-parse --show-toplevel'
   if path then
-    local dir = vim.fn.fnamemodify(path, ':h')
+    local dir
+    if vim.fn.isdirectory(path) == 1 then
+      dir = path
+    else
+      dir = vim.fn.fnamemodify(path, ':h')
+    end
     cmd = 'git -C ' .. vim.fn.shellescape(dir) .. ' rev-parse --show-toplevel'
   end
   local result = vim.fn.systemlist(cmd)

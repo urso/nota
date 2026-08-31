@@ -4,6 +4,8 @@ local defaults = {
   binary = nil,
   show_statuses = { 'open' },
   inline_scope = 'off',
+  sign_column = false,
+  eol_badge = true,
 }
 
 M._config = vim.deepcopy(defaults)

@@ -296,9 +296,9 @@ func TestSnapshotDiff(t *testing.T) {
 	}
 
 	current := map[string]fileSnapshot{
-		"/a.xml": {size: 100},      // unchanged
-		"/b.xml": {size: 250},      // modified
-		"/d.xml": {size: 400},      // added
+		"/a.xml": {size: 100}, // unchanged
+		"/b.xml": {size: 250}, // modified
+		"/d.xml": {size: 400}, // added
 		// /c.xml removed
 	}
 

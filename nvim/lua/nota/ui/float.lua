@@ -149,10 +149,12 @@ local function format_conversation(thread)
       table.insert(lines, '')
     end
     local author = comment.author or 'unknown'
-    local time = relative_time(comment.createdAt)
+    local bodies = comment.bodies or {}
+    local first_body = bodies[1]
+    local time = first_body and relative_time(first_body.time) or ''
     local meta = author .. (time ~= '' and (' · ' .. time) or '')
     table.insert(lines, meta)
-    local body = comment.body or ''
+    local body = first_body and first_body.content or ''
     for line in body:gmatch('[^\n]+') do
       table.insert(lines, '  ' .. line)
     end
