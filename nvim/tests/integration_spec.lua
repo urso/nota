@@ -118,7 +118,12 @@ describe('integration', function()
           goal = 'test goal',
           anchor = { line = 2, outdated = false },
           comments = {
-            { author = 'tester', body = 'Test comment body', createdAt = '2024-01-01T10:00:00Z' },
+            {
+              author = 'tester',
+              bodies = {
+                { content = 'Test comment body', time = '2024-01-01T10:00:00Z' },
+              },
+            },
           },
         }
 
