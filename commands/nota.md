@@ -19,7 +19,7 @@ If no comments found, skip to Step 2.
 ## Step 2: Read open threads
 
 ```
-!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/list-open.sh`
+`bash ${CLAUDE_PLUGIN_ROOT}/scripts/list-open.sh`
 ```
 
 If no threads listed, report no open reviews and stop.
