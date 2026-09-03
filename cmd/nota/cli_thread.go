@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/urso/nota/pkg/git"
+	"github.com/urso/nota/pkg/service"
 	"github.com/urso/nota/pkg/thread"
 	"github.com/urso/nota/pkg/trace"
 )
@@ -34,6 +35,8 @@ type ThreadListCmd struct {
 	Goal   string `help:"Filter by goal"`
 	Group  string `help:"Filter by group"`
 	Tag    string `help:"Filter by tag"`
+	File   string `help:"Filter by resolved anchor file path"`
+	JSON   bool   `name:"json" help:"Output JSON array"`
 
 	// Relationship queries
 	RefsOf       string `help:"List threads that this thread references" name:"refs-of"`
@@ -47,6 +50,12 @@ func (c *ThreadListCmd) Run() error {
 }
 
 func (c *ThreadListCmd) run(w io.Writer, root string) error {
+	// Use service layer for --file or --json (requires anchor resolution)
+	if c.File != "" || c.JSON {
+		return c.runWithService(w, root)
+	}
+
+	// Fast path: relationship queries or simple field filters without service
 	dir := filepath.Join(root, ".nota")
 	filter := thread.ThreadFilter{
 		Status:       c.Status,
@@ -68,6 +77,41 @@ func (c *ThreadListCmd) run(w io.Writer, root string) error {
 		t := info.Thread
 		title := thread.ThreadTitle(t)
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", t.ID, t.Status, t.Goal, title)
+	}
+
+	return nil
+}
+
+func (c *ThreadListCmd) runWithService(w io.Writer, root string) error {
+	svc, err := service.New(root)
+	if err != nil {
+		return err
+	}
+
+	views, err := svc.List(service.Filter{
+		Status: c.Status,
+		Goal:   c.Goal,
+		Group:  c.Group,
+		Tag:    c.Tag,
+		File:   c.File,
+	})
+	if err != nil {
+		return err
+	}
+
+	if c.JSON {
+		result := make([]service.ThreadViewJSON, len(views))
+		for i, v := range views {
+			result[i] = v.ToJSON()
+		}
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(result)
+	}
+
+	for _, v := range views {
+		title := thread.ThreadTitle(v.Thread)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", v.Thread.ID, v.Thread.Status, v.Thread.Goal, title)
 	}
 
 	return nil
@@ -124,9 +168,20 @@ func (c *ThreadShowCmd) run(w io.Writer, root string) error {
 	}
 
 	if c.JSON {
+		svc, err := service.New(root)
+		if err != nil {
+			return err
+		}
+		view, err := svc.Get(c.ID)
+		if err != nil {
+			return err
+		}
+		if view == nil {
+			return fmt.Errorf("thread not found: %s", c.ID)
+		}
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		return enc.Encode(info.Thread)
+		return enc.Encode(view.ToJSON())
 	}
 
 	return renderThreadTo(w, info.Thread, renderOpts{Authors: c.Authors, Limit: c.Limit})

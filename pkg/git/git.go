@@ -155,6 +155,38 @@ func HeadCommit(dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// FileExistsAtCommit checks if a file exists in the given commit.
+// dir is the working directory; if empty, uses os.Getwd().
+func FileExistsAtCommit(dir, file, commit string) bool {
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			return false
+		}
+	}
+
+	// Get repo root for relative path conversion
+	root, err := RepoRoot(dir)
+	if err != nil {
+		return false
+	}
+
+	// Convert to relative path if absolute
+	relPath := file
+	if filepath.IsAbs(file) {
+		rel, err := filepath.Rel(root, file)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return false
+		}
+		relPath = rel
+	}
+
+	cmd := exec.Command("git", "cat-file", "-e", commit+":"+relPath)
+	cmd.Dir = root
+	return cmd.Run() == nil
+}
+
 // UserName returns the git user.name config value, or "user" as fallback.
 func UserName() string {
 	cmd := exec.Command("git", "config", "user.name")

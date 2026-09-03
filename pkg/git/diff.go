@@ -14,6 +14,7 @@ type Diff struct {
 	OldName string
 	NewName string
 	Deleted bool
+	Created bool // File was created (didn't exist in old commit)
 	Hunks   []Hunk
 }
 
@@ -87,8 +88,15 @@ func ParseDiffs(data []byte) ([]Diff, error) {
 		}
 
 		if strings.HasPrefix(line, "--- ") {
-			if line != "--- /dev/null" {
-				current.OldName = strings.TrimPrefix(line, "--- a/")
+			if line == "--- /dev/null" {
+				current.Created = true
+			} else {
+				// Handle various git diff prefixes: a/, c/ (worktree), or none
+				name := line[4:] // Strip "--- "
+				if len(name) >= 2 && name[1] == '/' {
+					name = name[2:] // Strip single-char prefix like "a/" or "c/"
+				}
+				current.OldName = name
 			}
 			continue
 		}
@@ -97,7 +105,12 @@ func ParseDiffs(data []byte) ([]Diff, error) {
 			if line == "+++ /dev/null" {
 				current.Deleted = true
 			} else {
-				current.NewName = strings.TrimPrefix(line, "+++ b/")
+				// Handle various git diff prefixes: b/, w/ (worktree), or none
+				name := line[4:] // Strip "+++ "
+				if len(name) >= 2 && name[1] == '/' {
+					name = name[2:] // Strip single-char prefix like "b/" or "w/"
+				}
+				current.NewName = name
 			}
 			continue
 		}

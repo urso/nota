@@ -26,6 +26,7 @@ type CLI struct {
 	Init     InitCmd     `cmd:"" help:"Create .nota/ directory"`
 	Validate ValidateCmd `cmd:"" help:"Validate thread files"`
 	Behavior BehaviorCmd `cmd:"" help:"Show tag behaviors"`
+	Daemon   DaemonCmd   `cmd:"" help:"Start JSON-RPC daemon on stdio"`
 }
 
 // InitCmd creates the .nota/ directory.

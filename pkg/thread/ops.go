@@ -110,7 +110,10 @@ func ParseAnchor(s string) (*Anchor, error) {
 	}
 
 	if commit, err := git.HeadCommit(""); err == nil {
-		anchor.Commit = commit
+		// Only set commit if file exists at that commit
+		if git.FileExistsAtCommit("", file, commit) {
+			anchor.Commit = commit
+		}
 	}
 
 	return anchor, nil
