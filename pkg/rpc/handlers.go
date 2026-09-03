@@ -183,6 +183,7 @@ func (h *ThreadHandlers) SetStatus(ctx context.Context, params json.RawMessage) 
 }
 
 type DidChangeParams struct {
+	Repo      string   `json:"repo"`
 	ThreadIDs []string `json:"threadIds"`
 	Files     []string `json:"files"`
 }
@@ -200,6 +201,7 @@ func SubscribeAndNotify(ctx context.Context, svc *service.Service, server *Serve
 				return
 			}
 			server.Notify("thread/didChange", DidChangeParams{
+				Repo:      svc.RepoRoot(),
 				ThreadIDs: event.ThreadIDs,
 				Files:     event.Files,
 			})

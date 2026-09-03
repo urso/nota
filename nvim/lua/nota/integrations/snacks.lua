@@ -117,8 +117,27 @@ function M.threads(opts)
   }, opts))
 end
 
+local function filter_by_status(threads, status)
+  if not status then
+    return threads
+  end
+  local result = {}
+  for _, t in ipairs(threads) do
+    if t.status == status then
+      table.insert(result, t)
+    end
+  end
+  return result
+end
+
 function M.threads_all(opts)
   opts = opts or {}
+  local status = opts.status
+  if status == nil then
+    status = 'open'
+  elseif status == 'all' then
+    status = nil
+  end
 
   nota.ensure_loaded(nil, function(loaded)
     if not loaded then
@@ -127,7 +146,7 @@ function M.threads_all(opts)
     end
 
     vim.schedule(function()
-      local threads = nota.get_all_threads()
+      local threads = filter_by_status(nota.get_all_threads(), status)
 
       if #threads == 0 then
         vim.notify('No threads in repository', vim.log.levels.INFO)
@@ -198,7 +217,13 @@ M.threads_source = {
 
 M.threads_all_source = {
   title = 'Nota Threads (All)',
-  finder = function(_, _)
+  finder = function(ctx, _)
+    local status = ctx and ctx.opts and ctx.opts.status
+    if status == nil then
+      status = 'open'
+    elseif status == 'all' then
+      status = nil
+    end
     return function(cb)
       nota.ensure_loaded(nil, function(loaded)
         if not loaded then
@@ -206,7 +231,7 @@ M.threads_all_source = {
           return
         end
         vim.schedule(function()
-          local threads = nota.get_all_threads()
+          local threads = filter_by_status(nota.get_all_threads(), status)
           local items = {}
           local cwd = vim.fn.getcwd()
           for _, thread in ipairs(threads) do

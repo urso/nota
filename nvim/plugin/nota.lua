@@ -9,6 +9,10 @@ vim.api.nvim_create_user_command('NotaReset', function()
   require('nota.transport').reset()
 end, { desc = 'Reset nota daemon connection' })
 
+vim.api.nvim_create_user_command('NotaRestart', function()
+  require('nota').restart()
+end, { desc = 'Restart nota daemon and refresh threads' })
+
 local augroup = vim.api.nvim_create_augroup('Nota', { clear = true })
 
 vim.api.nvim_create_autocmd('BufEnter', {
@@ -106,6 +110,12 @@ vim.api.nvim_create_user_command('NotaQuickfix', function(opts)
 
   local scope = filters.scope or 'repo'
   filters.scope = nil
+
+  if not filters.status then
+    filters.status = 'open'
+  elseif filters.status == 'all' then
+    filters.status = nil
+  end
 
   local function filter_threads(threads)
     local result = {}

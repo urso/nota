@@ -209,6 +209,10 @@ function M._get_repo_state(repo)
   return repos[repo]
 end
 
+function M._get_attached_buffers()
+  return buffers
+end
+
 function M.refresh(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local buf_state = buffers[bufnr]

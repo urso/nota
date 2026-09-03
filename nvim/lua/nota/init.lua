@@ -86,4 +86,37 @@ function M.threads_at_cursor(bufnr)
   return float.threads_at_cursor(bufnr)
 end
 
+function M.restart(repo)
+  local transport = require('nota.transport')
+  local repo_utils = require('nota.repo')
+
+  repo = repo or repo_utils.get_root()
+  if not repo then
+    vim.notify('nota: not in a repository', vim.log.levels.WARN)
+    return false
+  end
+
+  transport.reset(repo)
+
+  vim.defer_fn(function()
+    transport.spawn(repo)
+
+    for bufnr, buf_state in pairs(model._get_attached_buffers()) do
+      if vim.api.nvim_buf_is_valid(bufnr) and buf_state.repo == repo then
+        model.refresh(bufnr)
+      end
+    end
+
+    model.ensure_loaded(repo, function(ok)
+      if ok then
+        vim.notify('nota: daemon restarted', vim.log.levels.INFO)
+      else
+        vim.notify('nota: failed to reconnect', vim.log.levels.ERROR)
+      end
+    end)
+  end, 100)
+
+  return true
+end
+
 return M
